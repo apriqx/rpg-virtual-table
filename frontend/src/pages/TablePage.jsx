@@ -75,7 +75,7 @@ export default function TablePage() {
       const [mapData, gridData, fogData] = await Promise.all([
         api.maps.getOne(tableId, mapId),
         api.grid.get(tableId, mapId).catch(() => ({ gridConfig: DEFAULT_GRID })),
-        api.fog.getAll(tableId, mapId).catch(() => [])),
+        api.fog.getAll(tableId, mapId).catch(() => []),
       ]);
       setTokens(mapData.tokens || []);
       setGridConfig(gridData.gridConfig || DEFAULT_GRID);
