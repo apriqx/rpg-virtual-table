@@ -88,6 +88,7 @@ model TokenPermission {
   tokenId   String
   token     Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
   userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   canView   Boolean @default(true)
   canMove   Boolean @default(false)
   canResize Boolean @default(false)
