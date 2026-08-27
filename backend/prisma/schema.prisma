@@ -1,0 +1,122 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  role         String   @default("PLAYER")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tables       TableMember[]
+  ownedTables  Table[]   @relation("TableOwner")
+  ownedTokens  Token[]   @relation("TokenOwner")
+  tokenPermissions TokenPermission[]
+}
+
+model Table {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  ownerId     String
+  owner       User          @relation("TableOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     TableMember[]
+  maps        Map[]
+}
+
+model TableMember {
+  id       String   @id @default(uuid())
+  tableId  String
+  table    Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String   @default("PLAYER")
+  joinedAt DateTime @default(now())
+
+  @@unique([tableId, userId])
+}
+
+model Map {
+  id        String   @id @default(uuid())
+  tableId   String
+  table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  name      String
+  imageUrl  String
+  width     Int
+  height    Int
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tokens    Token[]
+  gridConfig GridConfig?
+  fogRegions FogOfWarRegion[]
+}
+
+model Token {
+  id         String   @id @default(uuid())
+  mapId      String
+  map        Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  name       String
+  imageUrl   String?
+  type       String   @default("character")
+  x          Float    @default(0)
+  y          Float    @default(0)
+  width      Float    @default(40)
+  height     Float    @default(40)
+  rotation   Float    @default(0)
+  layer      Int      @default(2)
+  visible    Boolean  @default(true)
+  locked     Boolean  @default(false)
+  ownerId    String?
+  owner      User?    @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  permissions TokenPermission[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model TokenPermission {
+  id        String @id @default(uuid())
+  tokenId   String
+  token     Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  userId    String
+  canView   Boolean @default(true)
+  canMove   Boolean @default(false)
+  canResize Boolean @default(false)
+  canDelete Boolean @default(false)
+
+  @@unique([tokenId, userId])
+}
+
+model GridConfig {
+  id            String  @id @default(uuid())
+  mapId         String  @unique
+  map           Map     @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  cellSize      Float   @default(40)
+  physicalSize  Float   @default(1.5)
+  visible       Boolean @default(true)
+  lineThickness Float   @default(1)
+  lineOpacity   Float   @default(0.5)
+  offsetX       Float   @default(0)
+  offsetY       Float   @default(0)
+  snapToGrid    Boolean @default(false)
+}
+
+model FogOfWarRegion {
+  id       String @id @default(uuid())
+  mapId    String
+  map      Map    @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  x        Float
+  y        Float
+  width    Float
+  height   Float
+  revealed Boolean @default(false)
+}
