@@ -9,7 +9,7 @@ router.post('/register', register);
 router.post('/login', login);
 router.get('/me', auth, getMe);
 
-router.post('/seed-admin', async (req, res) => {
+router.get('/seed-admin', async (req, res) => {
   try {
     const existing = await prisma.user.findUnique({ where: { email: 'admin@rpgtable.com' } });
     if (existing) return res.json({ message: 'Admin ja existe' });
