@@ -6,22 +6,32 @@ function filterTokensForPlayer(tokens, userId) {
     if (token.layer === 5) return false;
     const perm = token.permissions.find((p) => p.userId === userId);
     if (perm && !perm.canView) return false;
-    if (!perm && token.permissions.length > 0) return true;
-    if (token.permissions.length === 0) return true;
     return true;
   });
+}
+
+function getMediaType(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['mp4', 'avi', 'webm', 'mov'].includes(ext)) return 'video';
+  return 'image';
 }
 
 async function uploadMap(req, res) {
   try {
     const { tableId } = req.params;
-    const { name, width, height, active } = req.body;
+    const { name, width, height, active, imageUrl } = req.body;
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'Image file is required' });
+    let finalUrl = imageUrl || '';
+    let mediaType = 'image';
+
+    if (req.file) {
+      finalUrl = `/uploads/${req.file.filename}`;
+      mediaType = getMediaType(req.file.filename);
+    } else if (!finalUrl) {
+      return res.status(400).json({ error: 'Envie um arquivo ou uma URL' });
+    } else {
+      if (finalUrl.match(/\.(mp4|avi|webm|mov)(\?|$)/i)) mediaType = 'video';
     }
-
-    const imageUrl = `/uploads/${req.file.filename}`;
 
     const setActive = active === 'true' || active === true;
 
@@ -36,9 +46,10 @@ async function uploadMap(req, res) {
       data: {
         tableId,
         name,
-        imageUrl,
-        width: parseInt(width, 10),
-        height: parseInt(height, 10),
+        imageUrl: finalUrl,
+        mediaType,
+        width: parseInt(width, 10) || 1920,
+        height: parseInt(height, 10) || 1080,
         active: setActive,
       },
     });
@@ -52,21 +63,14 @@ async function uploadMap(req, res) {
 async function getMaps(req, res) {
   try {
     const { tableId } = req.params;
-
     const maps = await prisma.map.findMany({
       where: { tableId },
       select: {
-        id: true,
-        name: true,
-        imageUrl: true,
-        width: true,
-        height: true,
-        active: true,
-        createdAt: true,
+        id: true, name: true, imageUrl: true, mediaType: true,
+        width: true, height: true, active: true, createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     });
-
     res.json(maps);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch maps' });
@@ -76,13 +80,10 @@ async function getMaps(req, res) {
 async function getMap(req, res) {
   try {
     const { mapId } = req.params;
-    const isMasterOrAdmin = req.user.role === 'ADMIN' || req.user.role === 'MASTER';
-
     const membership = await prisma.tableMember.findUnique({
       where: { tableId_userId: { tableId: req.params.tableId, userId: req.user.id } },
       select: { role: true },
     });
-
     const isMaster = membership && membership.role === 'MASTER';
     const isPrivileged = req.user.role === 'ADMIN' || isMaster;
 
@@ -95,17 +96,13 @@ async function getMap(req, res) {
       },
     });
 
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!map) return res.status(404).json({ error: 'Map not found' });
 
     let result = { ...map };
-
     if (!isPrivileged) {
       result.tokens = filterTokensForPlayer(map.tokens, req.user.id);
       result.fogRegions = map.fogRegions.filter((r) => r.revealed);
     }
-
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch map' });
@@ -116,10 +113,8 @@ async function updateMap(req, res) {
   try {
     const { mapId } = req.params;
     const { name, active } = req.body;
-
     const data = {};
     if (name !== undefined) data.name = name;
-
     if (active !== undefined) {
       const setActive = active === 'true' || active === true;
       if (setActive) {
@@ -133,12 +128,7 @@ async function updateMap(req, res) {
       }
       data.active = setActive;
     }
-
-    const map = await prisma.map.update({
-      where: { id: mapId },
-      data,
-    });
-
+    const map = await prisma.map.update({ where: { id: mapId }, data });
     res.json(map);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update map' });
@@ -148,7 +138,6 @@ async function updateMap(req, res) {
 async function deleteMap(req, res) {
   try {
     const { mapId } = req.params;
-
     await prisma.map.delete({ where: { id: mapId } });
     res.json({ message: 'Map deleted' });
   } catch (error) {

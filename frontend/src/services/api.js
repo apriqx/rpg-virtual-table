@@ -79,7 +79,7 @@ const tables = {
     const res = await api.delete(`/tables/${tableId}/members/${userId}`);
     return res.data;
   },
-  updateMemberRole: async (tableId, userId, role) => {
+ updateMemberRole: async (tableId, userId, role) => {
     const res = await api.put(`/tables/${tableId}/members/${userId}`, { role });
     return res.data;
   },
@@ -90,11 +90,11 @@ const maps = {
     const res = await api.get(`/tables/${tableId}/maps`);
     return res.data;
   },
-  getOne: async (tableId, mapId) => {
+ getOne: async (tableId, mapId) => {
     const res = await api.get(`/tables/${tableId}/maps/${mapId}`);
     return res.data;
   },
-  create: async (tableId, formData) => {
+ create: async (tableId, formData) => {
     const res = await api.post(`/tables/${tableId}/maps`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -104,7 +104,7 @@ const maps = {
     const res = await api.put(`/tables/${tableId}/maps/${mapId}`, data);
     return res.data;
   },
-  remove: async (tableId, mapId) => {
+ remove: async (tableId, mapId) => {
     const res = await api.delete(`/tables/${tableId}/maps/${mapId}`);
     return res.data;
   },
@@ -115,15 +115,15 @@ const tokens = {
     const res = await api.get(`/tables/${tableId}/maps/${mapId}/tokens`);
     return res.data;
   },
-  create: async (tableId, mapId, data) => {
+ create: async (tableId, mapId, data) => {
     const res = await api.post(`/tables/${tableId}/maps/${mapId}/tokens`, data);
     return res.data;
   },
-  update: async (tableId, mapId, tokenId, data) => {
+ update: async (tableId, mapId, tokenId, data) => {
     const res = await api.put(`/tables/${tableId}/maps/${mapId}/tokens/${tokenId}`, data);
     return res.data;
   },
-  remove: async (tableId, mapId, tokenId) => {
+ remove: async (tableId, mapId, tokenId) => {
     const res = await api.delete(`/tables/${tableId}/maps/${mapId}/tokens/${tokenId}`);
     return res.data;
   },
@@ -131,7 +131,7 @@ const tokens = {
     const res = await api.put(`/tables/${tableId}/maps/${mapId}/tokens/${tokenId}/permissions`, { permissions });
     return res.data;
   },
-  getPermissions: async (tableId, mapId, tokenId) => {
+ getPermissions: async (tableId, mapId, tokenId) => {
     const res = await api.get(`/tables/${tableId}/maps/${mapId}/tokens/${tokenId}/permissions`);
     return res.data;
   },
@@ -142,7 +142,7 @@ const grid = {
     const res = await api.get(`/tables/${tableId}/maps/${mapId}/grid`);
     return res.data;
   },
-  update: async (tableId, mapId, data) => {
+ update: async (tableId, mapId, data) => {
     const res = await api.put(`/tables/${tableId}/maps/${mapId}/grid`, data);
     return res.data;
   },
@@ -157,11 +157,11 @@ const fog = {
     const res = await api.post(`/tables/${tableId}/maps/${mapId}/fog`, data);
     return res.data;
   },
-  update: async (tableId, mapId, fogId, data) => {
+ update: async (tableId, mapId, fogId, data) => {
     const res = await api.put(`/tables/${tableId}/maps/${mapId}/fog/${fogId}`, data);
     return res.data;
   },
-  remove: async (tableId, mapId, fogId) => {
+ remove: async (tableId, mapId, fogId) => {
     const res = await api.delete(`/tables/${tableId}/maps/${mapId}/fog/${fogId}`);
     return res.data;
   },
