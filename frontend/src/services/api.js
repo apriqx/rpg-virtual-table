@@ -1,9 +1,11 @@
 import axios from 'axios';
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}`
+  : '';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL
-    ? `${import.meta.env.VITE_API_URL}/api`
-    : '/api',
+  baseURL: `${API_BASE}/api`,
 });
 
 api.interceptors.request.use((config) => {
@@ -24,6 +26,14 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export function resolveUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+  return `${API_BASE}${path}`;
+}
 
 const auth = {
   register: async (email, username, password) => {
@@ -161,4 +171,4 @@ const fog = {
   },
 };
 
-export default { auth, tables, maps, tokens, grid, fog };
+export default { auth, tables, maps, tokens, grid, fog, resolveUrl };
