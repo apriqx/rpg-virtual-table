@@ -3,7 +3,7 @@ import { useState } from 'react';
 export default function TokenDialog({ open, onClose, onSubmit, members }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('character');
-  const [imageFile, setImageFile] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
   const [width, setWidth] = useState(40);
   const [height, setHeight] = useState(40);
   const [layer, setLayer] = useState(2);
@@ -14,10 +14,10 @@ export default function TokenDialog({ open, onClose, onSubmit, members }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSubmit({ name, type, imageFile, width, height, layer, visible, ownerId: ownerId || null });
+    onSubmit({ name, type, imageUrl: imageUrl || null, width, height, layer, visible, ownerId: ownerId || null });
     setName('');
     setType('character');
-    setImageFile(null);
+    setImageUrl('');
     setWidth(40);
     setHeight(40);
     setLayer(2);
@@ -28,7 +28,7 @@ export default function TokenDialog({ open, onClose, onSubmit, members }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>×</button>
+        <button className="modal-close" onClick={onClose}>x</button>
         <h2>Novo Token</h2>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -46,8 +46,14 @@ export default function TokenDialog({ open, onClose, onSubmit, members }) {
             </select>
           </div>
           <div className="form-group">
-            <label>Imagem (opcional)</label>
-            <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0] || null)} />
+            <label>Imagem (URL)</label>
+            <input
+              type="url"
+              placeholder="https://exemplo.com/imagem.png"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+            />
+            <small style={{ color: '#aaa' }}>Cole o link de uma imagem hospedada. Se vazio, usa um retangulo colorido.</small>
           </div>
           <div className="form-group">
             <label>Largura (px)</label>

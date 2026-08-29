@@ -44,7 +44,7 @@ export default function TablePage() {
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [tokenClickPos, setTokenClickPos] = useState(null);
 
-  const [uploadForm, setUploadForm] = useState({ name: '', width: 800, height: 600, file: null });
+  const [uploadForm, setUploadForm] = useState({ name: '', width: 1920, height: 1080, imageUrl: '' });
   const [addMemberForm, setAddMemberForm] = useState({ username: '', role: 'PLAYER' });
   const [brushSize, setBrushSize] = useState(50);
 
@@ -104,13 +104,17 @@ export default function TablePage() {
 
   async function handleUploadMap(e) {
     e.preventDefault();
-    const formData = new FormData();
-    formData.append('image', uploadForm.file);
-    formData.append('name', uploadForm.name);
-    formData.append('width', uploadForm.width);
-    formData.append('height', uploadForm.height);
-    formData.append('active', maps.length === 0 ? 'true' : 'false');
+    if (!uploadForm.imageUrl.trim()) {
+      alert('Cole a URL do mapa');
+      return;
+    }
     try {
+      const formData = new FormData();
+      formData.append('name', uploadForm.name);
+      formData.append('imageUrl', uploadForm.imageUrl.trim());
+      formData.append('width', uploadForm.width);
+      formData.append('height', uploadForm.height);
+      formData.append('active', maps.length === 0 ? 'true' : 'false');
       const data = await api.maps.create(tableId, formData);
       const newMaps = [...maps, data.map];
       setMaps(newMaps);
@@ -119,9 +123,9 @@ export default function TablePage() {
         await loadMapData(data.map.id);
       }
       setShowUploadModal(false);
-      setUploadForm({ name: '', width: 800, height: 600, file: null });
+      setUploadForm({ name: '', width: 1920, height: 1080, imageUrl: '' });
     } catch (err) {
-      alert('Erro ao enviar mapa');
+      alert('Erro ao adicionar mapa: ' + (err.response?.data?.error || err.message));
     }
   }
 
@@ -415,15 +419,22 @@ export default function TablePage() {
         <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowUploadModal(false)}>×</button>
-            <h2>Enviar Mapa</h2>
+            <h2>Adicionar Mapa</h2>
             <form onSubmit={handleUploadMap}>
               <div className="form-group">
                 <label>Nome</label>
                 <input value={uploadForm.name} onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label>Imagem</label>
-                <input type="file" accept="image/*" onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files[0] })} required />
+                <label>URL do mapa (imagem ou video)</label>
+                <input
+                  type="url"
+                  placeholder="https://exemplo.com/mapa.jpg"
+                  value={uploadForm.imageUrl}
+                  onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })}
+                  required
+                />
+                <small style={{ color: '#aaa' }}>Imagens (JPG, PNG, WebP) ou videos (MP4, AVI) hospedados em qualquer servico</small>
               </div>
               <div className="form-group">
                 <label>Largura (px)</label>
@@ -435,7 +446,7 @@ export default function TablePage() {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowUploadModal(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Enviar</button>
+                <button type="submit" className="btn btn-primary">Adicionar</button>
               </div>
             </form>
           </div>

@@ -1,23 +1,28 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Stage, Layer, Rect, Line, Image as KonvaImage, Text, Group, Circle } from 'react-konva';
+import { Stage, Layer, Rect, Line, Image as KonvaImage, Text, Group } from 'react-konva';
 import React from 'react';
+import { resolveUrl } from '../services/api';
 
-const TokenComponent = React.memo(function TokenComponent({ token, isSelected, isMaster, onDragEnd, onClick, onSelect }) {
+const TokenComponent = React.memo(function TokenComponent({ token, isSelected, isMaster, onDragEnd, onClick, snapToGrid }) {
   const [img, setImg] = useState(null);
 
   useEffect(() => {
     if (token.imageUrl) {
       const image = new window.Image();
       image.crossOrigin = 'anonymous';
-      image.src = token.imageUrl;
+      image.src = resolveUrl(token.imageUrl);
       image.onload = () => setImg(image);
+      image.onerror = () => setImg(null);
     } else {
       setImg(null);
     }
   }, [token.imageUrl]);
 
   function handleDragEnd(e) {
-    onDragEnd(token.id, e.target.x(), e.target.y());
+    const x = e.target.x();
+    const y = e.target.y();
+    const snapped = snapToGrid(x, y);
+    onDragEnd(token.id, snapped.x, snapped.y);
   }
 
   function handleClick(e) {
@@ -26,12 +31,13 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   }
 
   const isMasterLayer = token.layer === 5;
+  const canDrag = isMaster || !token.locked;
 
   return (
     <Group
       x={token.x}
       y={token.y}
-      draggable={isMaster || !token.locked}
+      draggable={canDrag}
       onDragEnd={handleDragEnd}
       onClick={handleClick}
       onTap={handleClick}
@@ -94,13 +100,17 @@ function MapCanvas({
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [mapImage, setMapImage] = useState(null);
   const [selectedTokenId, setSelectedTokenId] = useState(null);
+  const videoRef = useRef(null);
+  const videoCanvasRef = useRef(null);
+  const animFrameRef = useRef(null);
   const isPanning = useRef(false);
   const lastPointerPos = useRef(null);
+
+  const isVideo = map?.mediaType === 'video';
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         setContainerSize({
@@ -114,36 +124,74 @@ function MapCanvas({
   }, []);
 
   useEffect(() => {
-    if (map?.imageUrl) {
-      const img = new window.Image();
-      img.crossOrigin = 'anonymous';
-      img.src = map.imageUrl;
-      img.onload = () => setMapImage(img);
-    } else {
+    if (!map?.imageUrl) {
       setMapImage(null);
+      return;
     }
-  }, [map?.imageUrl]);
+
+    if (isVideo) {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.src = resolveUrl(map.imageUrl);
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      videoRef.current = video;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = map.width;
+      canvas.height = map.height;
+      videoCanvasRef.current = canvas;
+
+      video.onloadeddata = () => {
+        video.play();
+        const ctx = canvas.getContext('2d');
+        function drawFrame() {
+          ctx.drawImage(video, 0, 0, map.width, map.height);
+          if (mapImage) {
+            mapImage.getStage()?.batchDraw();
+          }
+          animFrameRef.current = requestAnimationFrame(drawFrame);
+        }
+        drawFrame();
+      };
+
+      setMapImage(null);
+      const img = new window.Image();
+      img.onload = () => setMapImage(img);
+      img.src = '';
+    } else {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (videoRef.current) { videoRef.current.pause(); videoRef.current = null; }
+      const image = new window.Image();
+      image.crossOrigin = 'anonymous';
+      image.src = resolveUrl(map.imageUrl);
+      image.onload = () => setMapImage(image);
+      image.onerror = () => setMapImage(null);
+    }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (videoRef.current) { videoRef.current.pause(); videoRef.current = null; }
+    };
+  }, [map?.imageUrl, map?.mediaType, map?.width, map?.height]);
 
   const handleWheel = useCallback((e) => {
     e.evt.preventDefault();
     const stage = e.target.getStage();
     const oldScale = stageScale;
     const pointer = stage.getPointerPosition();
-
     const scaleBy = 1.08;
     const newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
     const clampedScale = Math.max(0.1, Math.min(5, newScale));
-
     const mousePointTo = {
       x: (pointer.x - stagePos.x) / oldScale,
       y: (pointer.y - stagePos.y) / oldScale,
     };
-
     const newPos = {
       x: pointer.x - mousePointTo.x * clampedScale,
       y: pointer.y - mousePointTo.y * clampedScale,
     };
-
     setStageScale(clampedScale);
     setStagePos(newPos);
   }, [stageScale, stagePos]);
@@ -157,8 +205,6 @@ function MapCanvas({
 
   const handleMouseMove = useCallback((e) => {
     if (!isPanning.current) return;
-    const stage = e.target.getStage();
-    if (!stage) return;
     const newPos = {
       x: stagePos.x + (e.evt.clientX - lastPointerPos.current.x),
       y: stagePos.y + (e.evt.clientY - lastPointerPos.current.y),
@@ -182,22 +228,16 @@ function MapCanvas({
   }, [gridConfig]);
 
   const handleTokenDragEnd = useCallback((tokenId, x, y) => {
-    const snapped = snapToGrid(x, y);
-    onTokenMove(tokenId, snapped.x, snapped.y);
-  }, [onTokenMove, snapToGrid]);
+    onTokenMove(tokenId, x, y);
+  }, [onTokenMove]);
+
+  const handleTokenClick = useCallback((tokenId) => {
+    setSelectedTokenId(tokenId);
+    onTokenSelect(tokenId);
+  }, [onTokenSelect]);
 
   const handleStageClick = useCallback((e) => {
-    if (e.target !== e.target.getStage()) {
-      const clickedToken = tokens.find((t) => {
-        const node = e.target;
-        const parent = node.parent;
-        return parent && parent.attrs && parent.attrs.x !== undefined && tokens.some(
-          (token) => token.x === parent.attrs.x && token.y === parent.attrs.y
-        );
-      });
-      return;
-    }
-
+    if (e.target !== e.target.getStage()) return;
     setSelectedTokenId(null);
 
     if (currentTool === 'addToken' && isMaster) {
@@ -216,6 +256,7 @@ function MapCanvas({
       const y = (pointer.y - stagePos.y) / stageScale;
       const half = brushSize / 2;
       const newRegion = {
+        id: Date.now().toString(),
         x: x - half,
         y: y - half,
         width: brushSize,
@@ -224,12 +265,7 @@ function MapCanvas({
       };
       onFogUpdate([...fogRegions, newRegion]);
     }
-  }, [currentTool, isMaster, stagePos, stageScale, snapToGrid, onAddToken, onFogUpdate, fogRegions, brushSize, tokens]);
-
-  const handleTokenClick = useCallback((tokenId) => {
-    setSelectedTokenId(tokenId);
-    onTokenSelect(tokenId);
-  }, [onTokenSelect]);
+  }, [currentTool, isMaster, stagePos, stageScale, snapToGrid, onAddToken, onFogUpdate, fogRegions, brushSize]);
 
   const gridLines = useMemo(() => {
     if (!gridConfig.visible) return [];
@@ -239,38 +275,24 @@ function MapCanvas({
     const oy = gridConfig.offsetY;
     for (let x = ox; x <= map.width; x += cs) {
       lines.push(
-        <Line
-          key={`v${x}`}
-          points={[x, 0, x, map.height]}
-          stroke="white"
-          strokeWidth={gridConfig.lineThickness}
-          opacity={gridConfig.lineOpacity}
-          listening={false}
-        />
+        <Line key={`v${x}`} points={[x, 0, x, map.height]} stroke="white" strokeWidth={gridConfig.lineThickness} opacity={gridConfig.lineOpacity} listening={false} />
       );
     }
     for (let y = oy; y <= map.height; y += cs) {
       lines.push(
-        <Line
-          key={`h${y}`}
-          points={[0, y, map.width, y]}
-          stroke="white"
-          strokeWidth={gridConfig.lineThickness}
-          opacity={gridConfig.lineOpacity}
-          listening={false}
-        />
+        <Line key={`h${y}`} points={[0, y, map.width, y]} stroke="white" strokeWidth={gridConfig.lineThickness} opacity={gridConfig.lineOpacity} listening={false} />
       );
     }
     return lines;
   }, [gridConfig, map.width, map.height]);
 
-  const playerTokens = useMemo(() => tokens.filter((t) => t.layer !== 5), [tokens]);
   const masterTokens = useMemo(() => tokens.filter((t) => t.layer === 5), [tokens]);
+  const playerTokens = useMemo(() => tokens.filter((t) => t.layer !== 5), [tokens]);
 
-  const isDraggable = currentTool === 'select' || currentTool === 'move';
+  const mapImageSource = isVideo ? videoCanvasRef.current : mapImage;
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
       <Stage
         ref={stageRef}
         width={containerSize.width}
@@ -287,14 +309,33 @@ function MapCanvas({
         draggable={currentTool === 'move'}
         style={{ cursor: currentTool === 'move' ? 'grab' : 'default' }}
       >
+        {/* CAMADA 1 - MAPA */}
         <Layer listening={false}>
-          {mapImage ? (
-            <KonvaImage image={mapImage} width={map.width} height={map.height} />
+          {mapImageSource ? (
+            <KonvaImage image={mapImageSource} width={map.width} height={map.height} />
           ) : (
             <Rect width={map.width} height={map.height} fill="#2a2a3e" />
           )}
         </Layer>
 
+        {/* CAMADA 2 - MESTRE (so visivel ao mestre) */}
+        {isMaster && masterTokens.length > 0 && (
+          <Layer>
+            {masterTokens.map((token) => (
+              <TokenComponent
+                key={token.id}
+                token={token}
+                isSelected={selectedTokenId === token.id}
+                isMaster={isMaster}
+                onDragEnd={handleTokenDragEnd}
+                onClick={handleTokenClick}
+                snapToGrid={snapToGrid}
+              />
+            ))}
+          </Layer>
+        )}
+
+        {/* CAMADA 3 - TOKENS / PERSONAGENS / OBJETOS */}
         <Layer>
           {playerTokens.map((token) => (
             <TokenComponent
@@ -304,15 +345,17 @@ function MapCanvas({
               isMaster={isMaster}
               onDragEnd={handleTokenDragEnd}
               onClick={handleTokenClick}
-              onSelect={handleTokenClick}
+              snapToGrid={snapToGrid}
             />
           ))}
         </Layer>
 
+        {/* CAMADA 4 - GRID (acima de tudo exceto neblina) */}
         <Layer listening={false}>
           {gridLines}
         </Layer>
 
+        {/* CAMADA 5 - FOG OF WAR (sempre no topo) */}
         <Layer listening={false}>
           <Rect
             x={0}
@@ -325,33 +368,10 @@ function MapCanvas({
           />
           <Group globalCompositeOperation="destination-out">
             {fogRegions.filter((r) => r.revealed).map((r, i) => (
-              <Rect
-                key={r.id || i}
-                x={r.x}
-                y={r.y}
-                width={r.width}
-                height={r.height}
-                fill="white"
-              />
+              <Rect key={r.id || i} x={r.x} y={r.y} width={r.width} height={r.height} fill="white" />
             ))}
           </Group>
         </Layer>
-
-        {isMaster && masterTokens.length > 0 && (
-          <Layer>
-            {masterTokens.map((token) => (
-              <TokenComponent
-                key={token.id}
-                token={token}
-                isSelected={selectedTokenId === token.id}
-                isMaster={isMaster}
-                onDragEnd={handleTokenDragEnd}
-                onClick={handleTokenClick}
-                onSelect={handleTokenClick}
-              />
-            ))}
-          </Layer>
-        )}
       </Stage>
     </div>
   );
