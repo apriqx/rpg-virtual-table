@@ -12,30 +12,14 @@ function generateToken(user) {
 async function auth(req, res, next) {
   try {
     const header = req.headers.authorization;
-    if (!header || !header.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
+    if (!header || !header.startsWith('Bearer ')) return res.status(401).json({ error: 'Token nao fornecido' });
     const token = header.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, email: true, username: true, role: true, createdAt: true, updatedAt: true },
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' });
-    }
-
+    const user = await prisma.user.findUnique({ where: { id: decoded.id }, select: { id: true, email: true, username: true, role: true } });
+    if (!user) return res.status(401).json({ error: 'Usuario nao encontrado' });
     req.user = user;
     next();
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    return res.status(401).json({ error: 'Authentication failed' });
-  }
+  } catch (error) { return res.status(401).json({ error: 'Token invalido' }); }
 }
 
 module.exports = auth;

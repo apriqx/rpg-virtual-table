@@ -6,7 +6,8 @@ services:
     branch: main
     rootDir: backend
     buildCommand: npm install && npx prisma generate
-    startCommand: npm start
+    startCommand: npx prisma db push && npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production

@@ -18,6 +18,14 @@ export default function Register() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (username.trim().length < 3 || username.trim().length > 30) {
+      setError('Nome de usuario deve ter entre 3 e 30 caracteres');
+      return;
+    }
+    if (password.length < 6 || password.length > 100) {
+      setError('Senha deve ter entre 6 e 100 caracteres');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('As senhas nao coincidem');
       return;
@@ -26,7 +34,7 @@ export default function Register() {
       await register(email, username, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Erro ao criar conta');
+      setError(err.response?.data?.error || 'Erro ao criar conta');
     }
   }
 

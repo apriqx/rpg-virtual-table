@@ -1,37 +1,27 @@
 const { prisma } = require('../config/database');
+const { broadcastToTable } = require('../socket');
 
 async function getGridConfig(req, res) {
   try {
     const { mapId } = req.params;
-
-    const config = await prisma.gridConfig.findUnique({
-      where: { mapId },
-    });
-
+    const config = await prisma.gridConfig.findUnique({ where: { mapId } });
     if (!config) {
       return res.json({ gridConfig: {
-        cellSize: 40,
-        physicalSize: 1.5,
-        visible: true,
-        lineThickness: 1,
-        lineOpacity: 0.5,
-        offsetX: 0,
-        offsetY: 0,
-        snapToGrid: false,
+        cellSize: 40, physicalSize: 1.5, visible: true,
+        lineThickness: 1, lineOpacity: 0.5,
+        offsetX: 0, offsetY: 0, snapToGrid: false,
       }});
     }
-
     res.json({ gridConfig: config });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch grid config' });
+    res.status(500).json({ error: 'Erro ao buscar configuracao da grade' });
   }
 }
 
 async function updateGridConfig(req, res) {
   try {
-    const { mapId } = req.params;
+    const { mapId, tableId } = req.params;
     const { cellSize, physicalSize, visible, lineThickness, lineOpacity, offsetX, offsetY, snapToGrid } = req.body;
-
     const config = await prisma.gridConfig.upsert({
       where: { mapId },
       update: {
@@ -56,10 +46,10 @@ async function updateGridConfig(req, res) {
         snapToGrid: snapToGrid !== undefined ? snapToGrid : false,
       },
     });
-
+    broadcastToTable(tableId, 'grid:updated', { mapId, gridConfig: config });
     res.json({ gridConfig: config });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update grid config' });
+    res.status(500).json({ error: 'Erro ao atualizar grade' });
   }
 }
 

@@ -1,4 +1,4 @@
-*, *::before, *::after {
+﻿*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -706,3 +706,294 @@ body {
 .fog-controls button {
   white-space: nowrap;
 }
+.chat-container {
+  position: relative;
+  flex-shrink: 0;
+  width: 280px;
+  background: #1a1a2e;
+  border-left: 1px solid #2a2a4a;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s;
+}
+
+.chat-closed {
+  width: 32px;
+}
+
+.chat-toggle {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background: #16213e;
+  color: #8be9fd;
+  border: none;
+  border-radius: 0 6px 6px 0;
+  padding: 10px 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.chat-badge {
+  background: #e94560;
+  color: white;
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 10px;
+  margin-left: 6px;
+  font-weight: bold;
+}
+
+.chat-toggle:hover {
+  background: #0f3460;
+}
+
+.chat-closed .chat-toggle {
+  font-size: 11px;
+  padding: 10px 4px;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin-left: 32px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 2px;
+}
+
+.chat-msg {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.chat-msg-player {
+  background: #16213e;
+}
+
+.chat-msg-master {
+  background: #1a1a3e;
+  border-left: 2px solid #e94560;
+}
+
+.chat-msg-system {
+  color: #6272a4;
+  font-style: italic;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.chat-msg-dice {
+  background: #1e2a4a;
+  color: #f1fa8c;
+}
+
+.chat-msg-narrative {
+  background: #1a2e1a;
+  border-left: 2px solid #50fa7b;
+  color: #c8e6c9;
+  font-style: italic;
+}
+
+.chat-msg-whisper {
+  background: #2a1a2e;
+  border-left: 2px solid #bd93f9;
+  color: #caa9f5;
+}
+
+.chat-sender {
+  font-weight: bold;
+  margin-right: 6px;
+  color: #8be9fd;
+}
+
+.chat-msg-master .chat-sender {
+  color: #ff79c6;
+}
+
+.chat-msg-dice .chat-sender {
+  color: #f1fa8c;
+}
+
+.chat-time {
+  font-size: 10px;
+  color: #555;
+  margin-right: 6px;
+}
+
+.chat-text {
+  display: inline;
+}
+
+.chat-text strong {
+  color: #f1fa8c;
+}
+
+.chat-input-area {
+  padding: 8px;
+  border-top: 1px solid #2a2a4a;
+}
+
+.chat-type-selector {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.chat-type-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid #333;
+  border-radius: 3px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.chat-type-btn.active {
+  background: #e94560;
+  border-color: #e94560;
+  color: white;
+}
+
+.chat-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chat-muted-notice {
+  flex-basis: 100%;
+  padding: 4px 8px;
+  background: rgba(233, 69, 96, 0.15);
+  border: 1px solid #e94560;
+  border-radius: 4px;
+  color: #ff5555;
+  font-size: 11px;
+  text-align: center;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 6px 10px;
+  background: #16213e;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+  color: #eee;
+  font-size: 12px;
+  outline: none;
+}
+
+.chat-input:focus {
+  border-color: #e94560;
+}
+
+.chat-send-btn {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.dice-roller { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 10px; margin-top: 4px; } .dice-roller-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold; color: #f1fa8c; margin-bottom: 8px; } .dice-buttons { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; } .dice-btn { padding: 4px 10px; background: #16213e; border: 1px solid #333; border-radius: 4px; color: #8be9fd; cursor: pointer; font-size: 12px; font-weight: bold; } .dice-btn:hover { background: #0f3460; border-color: #8be9fd; } .dice-custom-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; font-size: 11px; color: #aaa; } .dice-custom-row label { white-space: nowrap; } .dice-input { width: 48px; padding: 3px 6px; background: #16213e; border: 1px solid #2a2a4a; border-radius: 3px; color: #eee; font-size: 12px; outline: none; } .dice-input-sm { width: 36px; } .dice-input:focus { border-color: #e94560; } .dice-last-roll { margin-top: 8px; padding: 6px 8px; background: #1e2a4a; border-radius: 4px; color: #f1fa8c; font-size: 12px; } .dice-last-roll strong { color: #f1fa8c; font-size: 14px; } .dice-result-box { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .dice-chip { background: #1e2a4a; border: 1px solid #444; border-radius: 6px; padding: 4px 10px; font-size: 15px; font-weight: bold; color: #eee; animation: dice-pop 0.35s ease both; } .dice-total { font-size: 20px; font-weight: bold; color: #e94560; margin-left: 4px; animation: dice-pop 0.35s ease both; } .dice-rolling-num { color: #f1fa8c; animation: dice-shake 0.1s infinite; } .dice-rolling-label { font-size: 12px; color: #aaa; } @keyframes dice-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } } @keyframes dice-shake { 0% { transform: translateX(-2px) rotate(-4deg); } 50% { transform: translateX(2px) rotate(4deg); } 100% { transform: translateX(-2px) rotate(-4deg); } } .init-toggle { padding: 4px 10px; background: #16213e; border: 1px solid #2a2a4a; border-radius: 4px; color: #8be9fd; cursor: pointer; font-size: 11px; white-space: nowrap; } .init-toggle:hover { background: #0f3460; } .init-badge { background: #e94560; color: white; border-radius: 8px; padding: 0 5px; font-size: 10px; margin-left: 4px; } .init-tracker { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 10px; margin-top: 4px; max-height: 300px; display: flex; flex-direction: column; } .init-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: bold; color: #50fa7b; margin-bottom: 8px; } .init-actions { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; } .init-turn-controls { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: #aaa; } .init-turn-label strong { color: #f1fa8c; } .init-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; } .init-list::-webkit-scrollbar { width: 4px; } .init-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; } .init-entry { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 4px; background: #16213e; font-size: 12px; cursor: default; } .init-entry:hover { background: #1e2a4a; } .init-active { background: #2a3a5a; border-left: 3px solid #f1fa8c; } .init-dragging { opacity: 0.5; } .init-roll-btn { padding: 1px 5px; background: #0f3460; border: 1px solid #333; border-radius: 3px; color: #8be9fd; cursor: pointer; font-size: 10px; flex-shrink: 0; } .init-roll-btn:hover { background: #1a5276; } .init-init { width: 28px; text-align: center; font-weight: bold; color: #f1fa8c; flex-shrink: 0; } .init-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #eee; } .init-active .init-name { color: #f1fa8c; } .init-remove { background: none; border: none; color: #ff5555; cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; opacity: 0.5; } .init-entry:hover .init-remove { opacity: 1; } .init-empty { text-align: center; color: #555; font-size: 11px; padding: 12px; } .init-clear { margin-top: 6px; width: 100%; }
+
+.tools-row { display: flex; align-items: flex-start; gap: 6px; padding: 0 8px 6px; flex-wrap: wrap; }
+
+.char-sheet-modal { max-width: 480px; } .char-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; } .char-header h2 { margin: 0; font-size: 1.2rem; } .char-header-actions { display: flex; gap: 6px; } .char-portrait { width: 64px; height: 64px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #1a1a2e; border: 1px solid #333; display: flex; align-items: center; justify-content: center; } .char-portrait img { width: 100%; height: 100%; object-fit: cover; display: block; } .char-portrait-empty { color: #555; font-size: 24px; } .char-portrait-upload { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: #aaa; } .char-portrait-upload input[type="file"] { font-size: 12px; color: #aaa; max-width: 220px; } .char-hp-section { margin-bottom: 16px; } .char-hp-bar { height: 12px; background: #1a1a2e; border-radius: 6px; overflow: hidden; border: 1px solid #333; } .char-hp-fill { height: 100%; border-radius: 6px; transition: width 0.3s, background-color 0.3s; } .char-hp-text { font-size: 13px; margin-top: 4px; color: #aaa; } .char-hp-temp { color: #8be9fd; margin-left: 6px; } .char-hp-edit { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; } .char-hp-edit label { font-size: 12px; color: #aaa; } .char-hp-edit input { width: 60px; padding: 3px 6px; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #eee; font-size: 13px; outline: none; } .char-hp-edit input:focus { border-color: #e94560; } .char-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; } .char-stat { display: flex; flex-direction: column; align-items: center; background: #1a1a2e; padding: 8px; border-radius: 6px; border: 1px solid #2a2a4a; } .char-stat-label { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; } .char-stat-input { width: 48px; text-align: center; padding: 3px 6px; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #eee; font-size: 14px; outline: none; } .char-stat-input:focus { border-color: #e94560; } .char-combat-section { margin-bottom: 16px; } .char-combat-section h3 { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; } .char-combat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .char-notes-section { margin-bottom: 8px; } .char-notes-section h3 { font-size: 0.85rem; color: #aaa; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; } .char-notes-display { background: #1a1a2e; padding: 10px; border-radius: 6px; border: 1px solid #2a2a4a; min-height: 60px; font-size: 13px; white-space: pre-wrap; color: #ccc; } .char-notes-input { width: 100%; padding: 10px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; color: #eee; font-size: 13px; outline: none; resize: vertical; min-height: 60px; font-family: inherit; } .char-notes-input:focus { border-color: #e94560; } .char-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #1a1a2e; border-radius: 6px; margin-bottom: 6px; cursor: pointer; border: 1px solid transparent; transition: border-color 0.15s; } .char-list-item:hover { border-color: #333; } .char-list-info { flex: 1; min-width: 0; } .char-list-name { display: block; font-size: 14px; font-weight: bold; } .char-list-user { font-size: 11px; color: #6272a4; } .char-list-actions { display: flex; gap: 4px; margin-left: 8px; } .char-list-empty { text-align: center; color: #6272a4; padding: 20px; font-size: 13px; } .char-list-hp-mini { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: #aaa; } .char-list-hp-mini-fill { width: 60px; height: 6px; background: #1a1a2e; border-radius: 3px; overflow: hidden; flex-shrink: 0; transition: width 0.3s; }
+
+/* D&D 5e sheet */
+.dnd-body { font-size: 13px; }
+.dnd-roll-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 2px; opacity: 0.75; }
+.dnd-roll-btn:hover { opacity: 1; transform: scale(1.15); }
+.dnd-quick-hp { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.dnd-quick-hp .btn { padding: 2px 8px; font-size: 11px; }
+.dnd-body h4 { margin: 0 0 6px; font-size: 0.8rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+.dnd-identity { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.dnd-field-sm { display: flex; flex-direction: column; gap: 2px; }
+.dnd-field-sm label { font-size: 10px; color: #aaa; text-transform: uppercase; }
+.dnd-field-sm input, .dnd-field-sm select { background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 4px 6px; font-size: 13px; width: 90px; outline: none; }
+.dnd-field-sm input:disabled, .dnd-body input:disabled, .dnd-body textarea:disabled, .dnd-body select:disabled { opacity: 1; color: #eee; background: #16162a; }
+.dnd-insp { justify-content: center; }
+.dnd-insp label { font-size: 12px; color: #f1fa8c; }
+.dnd-hp-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.dnd-box { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.dnd-box label { font-size: 10px; color: #aaa; text-transform: uppercase; }
+.dnd-box input { background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 4px 6px; width: 70px; outline: none; }
+.dnd-hp-box { flex: 2; min-width: 200px; }
+.dnd-hp-inputs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: #aaa; }
+.dnd-ds { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #aaa; }
+.dnd-ds input { width: 40px; }
+.dnd-abilities { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px; }
+.dnd-ability { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dnd-ability-name { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+.dnd-ability input { width: 52px; text-align: center; background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; font-size: 16px; font-weight: bold; padding: 4px; outline: none; }
+.dnd-mod { color: #8be9fd; font-weight: bold; font-size: 13px; }
+.dnd-save { font-size: 10px; color: #aaa; display: flex; align-items: center; gap: 3px; }
+.dnd-mid-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; margin-bottom: 12px; }
+.dnd-skills { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px; max-height: 320px; overflow-y: auto; }
+.dnd-skill-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 12px; }
+.dnd-prof-dot { background: none; border: none; color: #e94560; cursor: pointer; font-size: 12px; width: 18px; text-align: center; padding: 0; }
+.dnd-prof-dot:disabled { cursor: default; }
+.dnd-prof-dot.p0 { color: #555; }
+.dnd-prof-dot.p1 { color: #50fa7b; }
+.dnd-prof-dot.p2 { color: #f1fa8c; }
+.dnd-skill-bonus { min-width: 30px; text-align: center; background: #16213e; border-radius: 3px; font-weight: bold; color: #eee; }
+.dnd-skill-name { color: #ccc; }
+.dnd-skill-name em { color: #666; font-style: normal; font-size: 10px; }
+.dnd-combat-boxes { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.dnd-combat-boxes .dnd-box { flex: 1; min-width: 70px; align-items: center; }
+.dnd-computed { font-size: 18px; font-weight: bold; color: #8be9fd; }
+.dnd-attacks { margin-bottom: 10px; }
+.dnd-attack-row { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+.dnd-attack-row input { background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 4px 6px; font-size: 12px; outline: none; flex: 1; min-width: 0; }
+.dnd-spells { margin-bottom: 10px; }
+.dnd-spell-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 12px; color: #aaa; flex-wrap: wrap; }
+.dnd-spell-top select { background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 3px 6px; }
+.dnd-spell-top strong { color: #8be9fd; }
+.dnd-slots { display: flex; gap: 6px; flex-wrap: wrap; }
+.dnd-slots label { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #aaa; gap: 2px; }
+.dnd-slots input { width: 40px; text-align: center; background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 3px; }
+.dnd-currency { display: flex; gap: 6px; flex-wrap: wrap; }
+.dnd-currency label { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #f1fa8c; gap: 2px; }
+.dnd-currency input { width: 48px; text-align: center; background: #16213e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 3px; }
+.dnd-text-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dnd-text-grid textarea { width: 100%; background: #1a1a2e; border: 1px solid #333; border-radius: 4px; color: #eee; padding: 6px; font-size: 12px; resize: vertical; outline: none; }
+.dnd-text-grid textarea:focus, .dnd-body input:focus:not(:disabled), .dnd-body select:focus:not(:disabled) { border-color: #e94560; }
+@media (max-width: 700px) { .dnd-abilities { grid-template-columns: repeat(3, 1fr); } .dnd-mid-grid { grid-template-columns: 1fr; } .dnd-text-grid { grid-template-columns: 1fr; } }
+
+
+
+/* --- Soundboard --- */
+.soundboard { position: relative; }
+.soundboard-panel { position: absolute; top: 110%; left: 0; z-index: 60; background: #282a36; border: 1px solid #44475a; border-radius: 8px; padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); width: 280px; }
+.sound-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.sound-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; background: #44475a; color: #f8f8f2; border: 1px solid #6272a4; border-radius: 6px; padding: 6px 2px; cursor: pointer; }
+.sound-btn:hover { background: #6272a4; }
+.sound-icon { font-size: 18px; }
+.sound-label { font-size: 10px; }
+.sound-controls { display: flex; align-items: center; gap: 8px; }
+.sound-vol { display: flex; align-items: center; gap: 4px; flex: 1; }
+.sound-vol input { width: 100%; }
+/* --- Rest buttons (D&D 5e) --- */
+.dnd-rest { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.dnd-slot-max { width: 42px !important; margin-left: 2px; }
+.dnd-slot-max-txt { color: #6272a4; font-size: 11px; margin-left: 2px; }
+.dnd-slots-hint { display: block; color: #6272a4; margin-top: 2px; }

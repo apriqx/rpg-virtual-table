@@ -3,7 +3,7 @@ const router = express.Router();
 const { uploadMap, getMaps, getMap, updateMap, deleteMap } = require('../controllers/mapController');
 const auth = require('../middleware/auth');
 const { requireMaster, isTableMember } = require('../middleware/permissions');
-const upload = require('../utils/upload');
+const { upload } = require('../utils/upload');
 
 router.post('/:tableId/maps', auth, requireMaster, upload.single('image'), uploadMap);
 router.get('/:tableId/maps', auth, isTableMember, getMaps);

@@ -1,36 +1,80 @@
 # Mesa Virtual de RPG
 
-Sistema web de mesa virtual de RPG com camadas independentes, Fog of War, grid configurável e sistema de permissões.
+Sistema web completo de mesa virtual (VTT) para RPG, com mapas, tokens, neblina de guerra (Fog of War), grade configurável, chat em tempo real com sussurros privados, rastreador de iniciativa, fichas de personagem e sistema de permissões.
 
 ## Tecnologias
 
-- **Backend**: Node.js + Express + Prisma + PostgreSQL
-- **Frontend**: React 18 + Vite + react-konva + react-router-dom
-- **Auth**: JWT + bcryptjs
-- **Deploy**: Render.com
+- **Backend**: Node.js + Express + Prisma + PostgreSQL + Socket.IO
+- **Frontend**: React 18 + Vite + react-konva (canvas) + react-router-dom
+- **Auth**: JWT + bcryptjs (+ rate limiting e helmet)
+- **Uploads**: multer (imagens e vídeos até 50MB)
+- **Deploy**: Docker Compose ou Render.com (`render.yaml` incluído)
+
+## Funcionalidades
+
+### Mesa
+- Múltiplos mapas por mesa, com troca de mapa sincronizada em tempo real
+- Mapas por **imagem (URL ou upload de arquivo)** ou **vídeo** (MP4/WebM)
+- Tokens com imagem própria (upload ou URL), nome, tipo, tamanho, camada (mestre/jogador), bloqueio e **raio de luz**
+- Movimentação de tokens com snap opcional à grade, presos aos limites do mapa
+- **Fog of War** com pincel (revelar/ocultar), revelar tudo e ocultar tudo
+- **Raio de luz**: tokens iluminam a neblina ao redor (quando Masquerade está OFF)
+- Grade configurável (tamanho da célula, escala em pés, opacidade, snap)
+- Ferramenta de **medição** (pixels, células e pés)
+- Desenhos (com cor), **anotações de texto (criar, editar e apagar)** e borracha
+- **Masquerade**: modo Vampiro — jogadores veem "???" nos tokens e sem HP/luz
+- Spotlight: mestre centra a visão de todos em um jogador/token
+
+### Social
+- Chat em tempo real com histórico (últimas 100 mensagens), sussurros privados (`/w usuario mensagem`), narração do mestre, rolagem de dados no chat (`/r 2d6+3`) e animação de rolagem
+- Indicador de mensagens não lidas com o chat fechado
+- Sussurro rápido: botão ✉ no membro preenche o comando
+- Mute de jogadores pelo mestre (aplicado no servidor)
+- Lista de membros com indicador de online
+
+### Combate
+- Rastreador de iniciativa com sincronização em tempo real
+- Adicionar combatentes do mapa ou manualmente, rolagem individual (d20) ou de todos
+- Contador de **rodadas** com avanço/volta automático
+- Reordenar por arrastar
+
+### Fichas e Permissões
+- Fichas de personagem com HP, atributos, combate e notas
+- Retrato do personagem por upload
+- Tokens podem ser vinculados a fichas (HP visível na barra do token)
+- Permissões granulares por token (ver, mover, redimensionar, excluir)
+- **Backup**: exportação/importação JSON de toda a mesa (mapas, tokens, neblina, desenhos, anotações, personagens) — somente mestre
 
 ## Estrutura do Projeto
 
 ```
 rpg-virtual-table/
-├── backend/                 # API REST
-│   ├── prisma/
-│   │   └── schema.prisma   # Modelo do banco de dados
+├── backend/                 # API REST + WebSocket
+│   ├── prisma/              # schema.prisma + seed
 │   ├── src/
-│   │   ├── index.js        # Servidor Express
-│   │   ├── config/         # Configuração do banco
-│   │   ├── controllers/    # Lógica de cada recurso
-│   │   ├── middleware/      # Auth e permissões
-│   │   ├── routes/         # Definição das rotas
-│   │   └── utils/          # Upload de arquivos
-│   └── uploads/            # Imagens enviadas
+│   │   ├── index.js         # Servidor Express
+│   │   ├── socket/          # Socket.IO (salas por mesa/usuário)
+│   │   ├── config/          # Conexão do banco
+│   │   ├── controllers/     # Lógica de cada recurso
+│   │   ├── middleware/      # Auth (JWT) e permissões
+│   │   ├── routes/          # Definição das rotas
+│   │   └── utils/           # Upload de arquivos (multer)
+│   ├── uploads/             # Arquivos enviados
+│   └── Dockerfile
 ├── frontend/                # Interface React
-│   └── src/
-│       ├── pages/          # Páginas (Login, Dashboard, TablePage)
-│       ├── components/     # Componentes (MapCanvas, Toolbar, etc.)
-│       ├── contexts/       # Context API (Auth)
-│       └── services/       # Cliente API (axios)
-├── render.yaml             # Configuração de deploy no Render
+│   ├── src/
+│   │   ├── pages/           # Login, Register, Dashboard, TablePage
+│   │   ├── components/      # MapCanvas, ChatPanel, InitiativeTracker, etc.
+│   │   ├── contexts/        # AuthContext
+│   │   └── services/        # api.js (axios) + socket.js
+│   ├── e2e-test.cjs         # Teste E2E (Playwright)
+│   ├── socket-test.cjs      # Teste de sincronização em tempo real
+│   ├── whisper-test.cjs     # Teste de privacidade dos sussurros
+│   ├── pagination-test.cjs  # Teste de paginação do chat
+│   ├── nginx.conf           # Proxy reverso (produção Docker)
+│   └── Dockerfile
+├── docker-compose.yml       # Postgres + backend + frontend (nginx)
+├── render.yaml              # Deploy no Render.com
 └── README.md
 ```
 
@@ -38,148 +82,107 @@ rpg-virtual-table/
 
 - Node.js 18+
 - PostgreSQL 14+
-- npm ou yarn
+- npm
 
 ## Instalação Local
 
-### 1. Clonar o repositório
-
-```bash
-git clone https://github.com/seu-usuario/rpg-virtual-table.git
-cd rpg-virtual-table
-```
-
-### 2. Configurar variáveis de ambiente
+### 1. Variáveis de ambiente
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Edite `backend/.env` com suas configurações:
+Edite `backend/.env`:
 
 ```env
 DATABASE_URL="postgresql://seu_usuario:sua_senha@localhost:5432/rpg_virtual_table?schema=public"
-JWT_SECRET="uma-chave-secreta-bem-segura"
+JWT_SECRET="uma-chave-secreta-bem-segura"   # obrigatoria (o servidor nao inicia sem ela)
 JWT_EXPIRES_IN="7d"
 PORT=3001
 NODE_ENV=development
 UPLOAD_DIR=./uploads
+FRONTEND_URL=http://localhost:5173
+
+# Cloudinary (opcional - deixe em branco para salvar no disco local)
+# CLOUDINARY_CLOUD_NAME=
+# CLOUDINARY_API_KEY=
+# CLOUDINARY_API_SECRET=
 ```
 
-### 3. Instalar dependências
+> **Uploads na nuvem (opcional):** preenchendo as 3 variáveis do Cloudinary
+> (Dashboard → Settings → Access Keys: *Cloud name*, *API key*, *API secret*),
+> mapas, retratos e imagens de token vão direto para a nuvem — recomendado em
+> hospedagens com disco efêmero como o Render. Sem elas, tudo continua
+> funcionando salvo no disco local.
 
-```bash
-# Backend
-cd backend
-npm install
-
-# Frontend (em outro terminal)
-cd frontend
-npm install
-```
-
-### 4. Configurar o banco de dados
+### 2. Instalar e configurar
 
 ```bash
 cd backend
-
-# Gerar o cliente Prisma
+npm install
 npx prisma generate
-
-# Criar as tabelas no banco
 npx prisma db push
+node prisma/seed.js   # cria o administrador
+
+cd ../frontend
+npm install
 ```
 
-### 5. Criar o primeiro administrador
+Credenciais padrão do admin: `admin@rpgtable.com` / `admin123` — **altere em produção**.
+
+### 3. Rodar
 
 ```bash
-cd backend
-node prisma/seed.js
-```
+# Terminal 1
+cd backend && npm run dev        # porta 3001
 
-Credenciais padrão:
-- **Email**: admin@rpgtable.com
-- **Senha**: admin123
-
-**IMPORTANTE**: Altere a senha após o primeiro login em produção.
-
-### 6. Executar o projeto
-
-```bash
-# Terminal 1 - Backend (porta 3001)
-cd backend
-npm run dev
-
-# Terminal 2 - Frontend (porta 5173)
-cd frontend
-npm run dev
+# Terminal 2
+cd frontend && npm run dev       # porta 5173
 ```
 
 Acesse: http://localhost:5173
 
-## Deploy no Render.com
+## Testes
 
-### Banco de Dados
-
-1. No Render Dashboard, crie um **PostgreSQL** (Free tier)
-2. Copie a `Internal Database URL` ou `External Database URL`
-
-### Backend
-
-1. Crie um novo **Web Service** no Render
-2. Conecte ao repositório GitHub
-3. Configure:
-   - **Build Command**: `cd backend && npm install && npx prisma generate`
-   - **Start Command**: `cd backend && npm start`
-   - **Environment**: Node
-4. Adicione as variáveis de ambiente:
-   - `DATABASE_URL` = (a URL do PostgreSQL do Render)
-   - `JWT_SECRET` = (uma chave segura aleatória)
-   - `JWT_EXPIRES_IN` = `7d`
-   - `PORT` = `3001`
-   - `NODE_ENV` = `production`
-   - `FRONTEND_URL` = (URL do frontend)
-   - `UPLOAD_DIR` = `./uploads`
-
-### Frontend
-
-1. Crie um novo **Static Site** no Render
-2. Conecte ao mesmo repositório GitHub
-3. Configure:
-   - **Build Command**: `cd frontend && npm install && npm run build`
-   - **Publish Directory**: `frontend/dist`
-4. Adicione a variável de ambiente:
-   - `VITE_API_URL` = (URL do backend, ex: `https://seu-backend.onrender.com`)
-
-### Ajuste do Frontend para Produção
-
-No arquivo `frontend/vite.config.js`, o proxy só funciona em desenvolvimento. Para produção, o frontend precisa chamar o backend diretamente. Configure a variável `VITE_API_URL` no build do frontend.
-
-No arquivo `frontend/src/services/api.js`, altere o baseURL para:
-```javascript
-baseURL: import.meta.env.VITE_API_URL || '/api'
-```
-
-### Alternativa com render.yaml
-
-O arquivo `render.yaml` na raiz do projeto permite deploy automático. Basta conectar o repositório e o Render detecta a configuração.
-
-## Notas sobre Uploads em Produção
-
-O Render não persiste arquivos locais entre deploys. Para armazenamento permanente de imagens de mapas e tokens, recomenda-se:
-
-- Usar um serviço como **AWS S3**, **Cloudinary** ou **Backblaze B2**
-- Ou usar o disco persistente do Render (pago)
-
-## Migrações do Banco de Dados
-
-O projeto usa `prisma db push` para sincronização direta. Para projetos em produção, use migrações formais:
+Com backend (3001) e frontend (5173) rodando:
 
 ```bash
-cd backend
-npx prisma migrate dev --name nome-da-migracao
-npx prisma migrate deploy  # Para produção
+cd frontend
+node socket-test.cjs      # sincronização em tempo real (5 testes)
+node whisper-test.cjs     # privacidade dos sussurros (3 testes)
+node pagination-test.cjs  # paginação do chat (envia 105 mensagens)
+node e2e-test.cjs         # fluxo completo no navegador (Playwright, 8 testes)
 ```
+
+## Deploy com Docker
+
+```bash
+JWT_SECRET="troque-esta-chave" DB_PASSWORD="troque-esta-senha" docker compose up -d --build
+```
+
+- Frontend: `http://localhost:8080` (nginx com proxy para `/api`, `/uploads` e WebSocket)
+- Postgres com volume persistente; backend roda `prisma db push` ao iniciar e expõe `/api/health` (com checagem de banco) para o healthcheck
+- Configure `APP_PORT`, `DB_PASSWORD`, `JWT_SECRET` e `FRONTEND_URL` conforme o ambiente
+
+## Deploy no Render.com
+
+O arquivo `render.yaml` descreve os três serviços (banco, API, frontend estático). Destaques:
+
+- A API executa `npx prisma db push && npm start` (cria as tabelas em banco novo) e usa `/api/health` como health check
+- `JWT_SECRET` e `FRONTEND_URL` devem ser preenchidos no dashboard do Render
+- **Uploads**: o sistema de arquivos do Render não persiste entre deploys. Para produção séria, mova os uploads para S3/Cloudinary ou use um disco persistente pago
+
+### Backup entre servidores
+
+O JSON de backup **não inclui** os arquivos de imagem enviados (referencia apenas as URLs `/uploads/...`). Para migrar de servidor, copie também o diretório `uploads/`.
+
+## Notas de Segurança
+
+- Senhas com bcrypt; tokens JWT com expiração configurável
+- Rate limiting: 1000 req/15min na API, 30 req/15min em `/api/auth`
+- Sussurros filtrados no servidor (nunca enviados a terceiros)
+- Tokens de mestre (camada 5) e tokens sem permissão nunca chegam ao cliente do jogador
+- Mute aplicado no servidor; uploads com whitelist de tipo e limite de 50MB
 
 ## Licença
 

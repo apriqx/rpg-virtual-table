@@ -8,29 +8,34 @@ generator client {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  username     String   @unique
-  passwordHash String
-  role         String   @default("PLAYER")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tables       TableMember[]
-  ownedTables  Table[]   @relation("TableOwner")
-  ownedTokens  Token[]   @relation("TokenOwner")
+  id             String          @id @default(uuid())
+  email          String          @unique
+  username        String          @unique
+  passwordHash    String
+  role            String          @default("PLAYER")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  tables          TableMember[]
+  ownedTables     Table[]         @relation("TableOwner")
+  ownedTokens     Token[]         @relation("TokenOwner")
   tokenPermissions TokenPermission[]
+  chatMessages    ChatMessage[]
+  characters      Character[]
 }
 
 model Table {
   id          String        @id @default(uuid())
   name        String
   description String?
+  masquerade  Boolean       @default(false)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   ownerId     String
   owner       User          @relation("TableOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members     TableMember[]
   maps        Map[]
+  messages    ChatMessage[]
+  characters  Character[]
 }
 
 model TableMember {
@@ -40,47 +45,85 @@ model TableMember {
   userId   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     String   @default("PLAYER")
+  muted    Boolean  @default(false)
   joinedAt DateTime @default(now())
 
   @@unique([tableId, userId])
 }
 
-model Map {
+model ChatMessage {
   id        String   @id @default(uuid())
   tableId   String
   table     Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  name      String
-  imageUrl  String
-  width     Int
-  height    Int
-  active    Boolean  @default(false)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username  String?
+  type      String   @default("player")
+  text      String
+  whisperTo String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@index([tableId, createdAt])
+}
+
+model Character {
+  id        String    @id @default(uuid())
+  tableId   String
+  table     Table     @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  system    String    @default("custom")
+  data      Json      @default("{\"hp\":{\"current\":0,\"max\":0,\"temp\":0}}")
   tokens    Token[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Map {
+  id         String   @id @default(uuid())
+  tableId    String
+  table      Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  name       String
+  imageUrl   String
+  bgImageUrl String?
+  fgImageUrl String?
+  mediaType  String   @default("image")
+  width      Int
+  height     Int
+  active     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tokens     Token[]
   gridConfig GridConfig?
   fogRegions FogOfWarRegion[]
+  drawings   Drawing[]
+  annotations Annotation[]
 }
 
 model Token {
-  id         String   @id @default(uuid())
-  mapId      String
-  map        Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
-  name       String
-  imageUrl   String?
-  type       String   @default("character")
-  x          Float    @default(0)
-  y          Float    @default(0)
-  width      Float    @default(40)
-  height     Float    @default(40)
-  rotation   Float    @default(0)
-  layer      Int      @default(2)
-  visible    Boolean  @default(true)
-  locked     Boolean  @default(false)
-  ownerId    String?
-  owner      User?    @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  permissions TokenPermission[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String     @id @default(uuid())
+  mapId        String
+  map          Map       @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  name         String
+  imageUrl     String?
+  type         String     @default("character")
+  x            Float      @default(0)
+  y            Float      @default(0)
+  width        Float      @default(40)
+  height       Float      @default(40)
+  rotation     Float      @default(0)
+  layer        Int        @default(2)
+  visible      Boolean    @default(true)
+  locked       Boolean    @default(false)
+  lightRadius  Float      @default(0)
+  ownerId      String?
+  characterId  String?
+  owner        User?      @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  character    Character?  @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  permissions  TokenPermission[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model TokenPermission {
@@ -88,6 +131,7 @@ model TokenPermission {
   tokenId   String
   token     Token  @relation(fields: [tokenId], references: [id], onDelete: Cascade)
   userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   canView   Boolean @default(true)
   canMove   Boolean @default(false)
   canResize Boolean @default(false)
@@ -119,4 +163,27 @@ model FogOfWarRegion {
   width    Float
   height   Float
   revealed Boolean @default(false)
+}
+
+model Drawing {
+  id        String   @id @default(uuid())
+  mapId     String
+  map       Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  color     String   @default("#e94560")
+  lineWidth Float    @default(3)
+  points    Json
+  layer     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Annotation {
+  id        String   @id @default(uuid())
+  mapId     String
+  map       Map      @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  text      String
+  x         Float
+  y         Float
+  color     String   @default("#ffffff")
+  fontSize  Int      @default(16)
+  createdAt DateTime @default(now())
 }
