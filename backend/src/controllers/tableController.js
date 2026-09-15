@@ -34,6 +34,7 @@ async function getTables(req, res) {
     const tables = memberships.map((m) => ({
       ...m.table,
       memberCount: m.table._count.members,
+      myRole: m.role,
     }));
     res.json(tables);
   } catch (error) {

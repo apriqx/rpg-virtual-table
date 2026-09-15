@@ -61,9 +61,10 @@ export default function Dashboard() {
     }
   }
 
-  function getMyRole(table) {
+  function getMyRole(table, item) {
     const userId = user.id;
     if (user.role === 'ADMIN') return 'MASTER';
+    if (item && item.myRole) return item.myRole;
     const member = table.members?.find((m) => m.userId === userId || m.user?.id === userId);
     return member?.role || 'PLAYER';
   }
@@ -93,7 +94,7 @@ export default function Dashboard() {
           {tables.map((item) => {
             const table = item.table || item;
             const memberCount = item.memberCount ?? table.members?.length ?? 0;
-            const role = getMyRole(table);
+            const role = getMyRole(table, item);
             const tableId = table.id;
             return (
               <div

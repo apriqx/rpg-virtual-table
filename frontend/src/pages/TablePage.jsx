@@ -77,7 +77,7 @@ export default function TablePage() {
   const [addMemberForm, setAddMemberForm] = useState({ username: '', role: 'PLAYER' });
   const [brushSize, setBrushSize] = useState(50);
 
-  const isMaster = user.role === 'ADMIN' || table?.members?.some(
+  const isMaster = user.role === 'ADMIN' || members.some(
     (m) => (m.userId === user.id || m.user?.id === user.id) && m.role === 'MASTER'
   );
   const masquerade = table?.masquerade || false;
