@@ -154,6 +154,33 @@ async function main() {
   ok('jogador nao cria token -> 403', r.status === 403);
   r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: mTok, body: { ownerId: 'nobody', lightRadius: 120 } });
   ok('update token com ownerId invalido nao quebra', r.status === 200 || r.status === 500);
+  // ---- regra 44: backend valida campos por papel ----
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canMove: true, canResize: false, canDelete: false }] } });
+  ok('mestre concede canMove do token ao player', r.status === 200 && Array.isArray(r.data) && r.data.some((p) => p.userId === pUser.id && p.canMove === true));
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { name: 'Renomeado pelo jogador' } });
+  ok('player com canMove renomeia token', r.status === 200 && r.data.name === 'Renomeado pelo jogador');
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { displayName: 'Apelido', imageUrl: 'https://exemplo.com/t.png' } });
+  ok('player com canMove muda apelido e URL', r.status === 200 && r.data.displayName === 'Apelido' && r.data.imageUrl === 'https://exemplo.com/t.png');
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { type: 'npc' } });
+  ok('player nao altera type -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { characterId: null } });
+  ok('player nao altera ficha vinculada -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { layer: 5 } });
+  ok('player nao altera camada -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { visionRadius: 60 } });
+  ok('player nao altera visao -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { ownerId: pUser.id } });
+  ok('player nao altera dono -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { visible: false } });
+  ok('player nao altera visibilidade -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: pTok, body: { locked: true } });
+  ok('player nao altera trava -> 403', r.status === 403);
+  r = await req('GET', `/tables/${tid}/maps/${mid}/tokens/${visibleId}/permissions`, { token: pTok });
+  ok('player nao le permissoes do token -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}/permissions`, { token: mTok, body: { permissions: [] } });
+  ok('mestre limpa permissoes do token', r.status === 200 && Array.isArray(r.data) && r.data.length === 0);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: mTok, body: { name: 'Visivel', displayName: null, imageUrl: null } });
+  ok('mestre restaura dados do token', r.status === 200 && r.data.name === 'Visivel' && r.data.displayName === null && r.data.imageUrl === null);
 
   // ---- neblina: formas (quadrado/circulo/poligono) ----
   r = await req('POST', `/tables/${tid}/maps/${mid}/fog`, { token: mTok, body: { x: 10, y: 10, width: 100, height: 100, revealed: true, shape: 'circle' } });

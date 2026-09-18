@@ -19,7 +19,7 @@ function loadBars(token) {
   return [0, 1, 2].map((i) => (arr[i] ? { ...emptyBar(i), ...arr[i] } : null));
 }
 
-export default function TokenDialog({ open, onClose, onSubmit, members, tableId, token, cellSize = 50, onOpenPermissions }) {
+export default function TokenDialog({ open, onClose, onSubmit, members, tableId, token, cellSize = 50, onOpenPermissions, isMaster = false }) {
   const [tab, setTab] = useState('geral');
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -68,6 +68,8 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
 
   if (!open) return null;
 
+  const tabs = isMaster ? TABS : TABS.filter((t) => t.key === 'geral' || t.key === 'status');
+
   function toggleMarker(key) { setMarkers((m) => (m.includes(key) ? m.filter((k) => k !== key) : [...m, key])); }
   function setBarSlot(i, patch) { setBars((b) => b.map((bar, idx) => (idx === i ? { ...emptyBar(i), ...bar, ...patch } : bar))); }
   function applySize(cells) { setWidth((cellSize || 50) * cells); setHeight((cellSize || 50) * cells); }
@@ -112,30 +114,39 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
         <button className="modal-close" onClick={onClose}>×</button>
         <h2>{token ? 'Editar Token' : 'Novo Token'}</h2>
         <div className="tab-nav">
-          {TABS.map((t) => <button key={t.key} type="button" className={`tab-btn${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
+          {tabs.map((t) => <button key={t.key} type="button" className={`tab-btn${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
         </div>
         <form onSubmit={handleSubmit}>
           {tab === 'geral' && (
             <>
               <div className="form-group"><label>Nome</label><input value={name} onChange={(e) => setName(e.target.value)} required /></div>
               <div className="form-group"><label>Nome de exibição (opcional)</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Deixe vazio para usar o nome" /><small style={{ color: '#aaa' }}>Jogadores veem este nome em vez do nome real.</small></div>
-              <div className="form-group"><label>Tipo</label><select value={type} onChange={(e) => setType(e.target.value)}><option value="character">Personagem</option><option value="npc">NPC</option><option value="monster">Monstro</option><option value="object">Objeto</option><option value="marker">Marcador</option></select></div>
-              <div className="form-group"><label>Ficha</label><select value={characterId} onChange={(e) => setCharacterId(e.target.value)}><option value="">Nenhuma</option>{characters.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select></div>
-              <div className="form-group"><label>Imagem (arquivo ou URL)</label><input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} /><input type="url" placeholder="https://exemplo.com/imagem.png" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /><small style={{ color: '#aaa' }}>{uploading ? 'Enviando arquivo...' : 'Envie um arquivo ou cole o link de uma imagem hospedada.'}</small>{imageUrl && <img src={resolveUrl(imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} />}</div>
+              <div className="form-group"><label>Tipo</label><select value={type} onChange={(e) => setType(e.target.value)} disabled={!isMaster}><option value="character">Personagem</option><option value="npc">NPC</option><option value="monster">Monstro</option><option value="object">Objeto</option><option value="marker">Marcador</option></select>{!isMaster && <small style={{ color: '#aaa' }}>Definido pelo mestre.</small>}</div>
+              <div className="form-group"><label>Ficha</label><select value={characterId} onChange={(e) => setCharacterId(e.target.value)} disabled={!isMaster}><option value="">Nenhuma</option>{characters.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>{!isMaster && <small style={{ color: '#aaa' }}>Vinculada pelo mestre.</small>}</div>
+              <div className="form-group"><label>Imagem</label>
+                {isMaster && <input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} />}
+                <input type="url" placeholder="https://exemplo.com/imagem.png" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
+                <small style={{ color: '#aaa' }}>{uploading ? 'Enviando arquivo...' : 'Envie um arquivo (mestre) ou cole o link de uma imagem hospedada.'}</small>
+                {imageUrl && <img src={resolveUrl(imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} />}
+              </div>
               <div className="form-group"><label>Tamanho</label>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {[1, 2, 3, 4].map((n) => <button key={n} type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => applySize(n)}>{n}x{n}</button>)}
-                </div>
+                {isMaster && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 4].map((n) => <button key={n} type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => applySize(n)}>{n}x{n}</button>)}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                  <input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))} min={10} aria-label="Largura" />
-                  <input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))} min={10} aria-label="Altura" />
+                  <input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))} min={10} aria-label="Largura" disabled={!isMaster} />
+                  <input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))} min={10} aria-label="Altura" disabled={!isMaster} />
                 </div>
               </div>
               <div className="form-group"><label>Rotação (graus)</label>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {[0, 45, 90, 180, 270].map((r) => <button key={r} type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 12, background: Number(rotation) === r ? '#e94560' : undefined }} onClick={() => setRotation(r)}>{r}°</button>)}
-                </div>
-                <input type="number" value={rotation} onChange={(e) => setRotation(Number(e.target.value))} min={0} max={359} style={{ marginTop: 6 }} />
+                {isMaster && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {[0, 45, 90, 180, 270].map((r) => <button key={r} type="button" className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: 12, background: Number(rotation) === r ? '#e94560' : undefined }} onClick={() => setRotation(r)}>{r}°</button>)}
+                  </div>
+                )}
+                <input type="number" value={rotation} onChange={(e) => setRotation(Number(e.target.value))} min={0} max={359} style={{ marginTop: 6 }} disabled={!isMaster} />
               </div>
             </>
           )}

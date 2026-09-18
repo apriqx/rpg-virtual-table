@@ -46,6 +46,14 @@ async function canModifyToken(req, res, next) {
     if (req.method === 'PUT') {
       const body = req.body;
       const keys = Object.keys(body);
+      const ADMIN_FIELDS = ['type', 'characterId', 'ownerId', 'layer', 'visible', 'locked', 'snapToGrid', 'lightRadius', 'visionRadius'];
+      if (keys.some((k) => ADMIN_FIELDS.includes(k))) {
+        return res.status(403).json({ error: 'Campo administrativo do token: apenas o mestre pode alterar' });
+      }
+      const PLAYER_FIELDS = ['name', 'displayName', 'imageUrl', 'bars', 'statusMarkers', 'showName', 'opacity', 'rotation', 'x', 'y', 'width', 'height'];
+      if (keys.some((k) => !PLAYER_FIELDS.includes(k))) {
+        return res.status(403).json({ error: 'Campo de token desconhecido para jogador' });
+      }
       const isOnlyPosition = keys.length > 0 && keys.every((k) => ['x', 'y'].includes(k));
       const isOnlySize = keys.length > 0 && keys.every((k) => ['width', 'height'].includes(k));
       if (isOnlyPosition && !permission.canMove) {

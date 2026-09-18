@@ -13,6 +13,6 @@ router.put('/:tableId/maps/:mapId/tokens/:tokenId', auth, canModifyToken, update
 router.post('/:tableId/maps/:mapId/tokens/:tokenId/duplicate', auth, requireMaster, duplicateToken);
 router.delete('/:tableId/maps/:mapId/tokens/:tokenId', auth, canModifyToken, deleteToken);
 router.put('/:tableId/maps/:mapId/tokens/:tokenId/permissions', auth, requireMaster, setTokenPermissions);
-router.get('/:tableId/maps/:mapId/tokens/:tokenId/permissions', auth, isTableMember, getTokenPermissions);
+router.get('/:tableId/maps/:mapId/tokens/:tokenId/permissions', auth, requireMaster, getTokenPermissions);
 
 module.exports = router;

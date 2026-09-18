@@ -91,7 +91,7 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   );
 });
 
-function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken, onSelectionChange }) {
+function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken, onSelectionChange, onOpenSheet, onOpenCompactSheet, onRollDice }) {
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [stageScale, setStageScale] = useState(1);
@@ -460,13 +460,28 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
           <div className="tcm-backdrop" onClick={() => setTokenMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTokenMenu(null); }} />
           <div className="token-context-menu" style={{ left: tokenMenu.x, top: tokenMenu.y }}>
             <div className="tcm-title">{tokenMenu.token.displayName || tokenMenu.token.name}</div>
+            {onRollDice && (
+              <button type="button" onClick={() => { setTokenMenu(null); onRollDice(); }}>🎲 Rolar dado</button>
+            )}
+            {tokenMenu.token.characterId && (
+              <div className="tcm-group">
+                <span className="tcm-group-label">Abrir Ficha</span>
+                <div className="tcm-group-btns">
+                  {isMaster && (
+                    <button type="button" onClick={() => { const t = tokenMenu.token; setTokenMenu(null); if (onOpenCompactSheet) onOpenCompactSheet(t); }}>⚔ Compacta</button>
+                  )}
+                  <button type="button" onClick={() => { const t = tokenMenu.token; setTokenMenu(null); if (onOpenSheet) onOpenSheet(t); }}>📖 {isMaster ? 'Ficha do Jogador' : 'Abrir Ficha'}</button>
+                </div>
+              </div>
+            )}
+            <button type="button" className="tcm-disabled" disabled title="Em breve: ações de combate do token">⚔ Ações</button>
             {(isMaster || (canControlToken && canControlToken(tokenMenu.token))) && (
               <button type="button" onClick={() => { const t = tokenMenu.token; setTokenMenu(null); if (onTokenEdit) onTokenEdit(t); }}>✏️ Editar</button>
             )}
             {isMaster && (
               <button type="button" onClick={() => { const t = tokenMenu.token; setTokenMenu(null); if (onTokenDuplicate) onTokenDuplicate(t); }}>📄 Duplicar</button>
             )}
-            {(isMaster || (canControlToken && canControlToken(tokenMenu.token))) && (
+            {isMaster && (
               <button type="button" onClick={() => { const t = tokenMenu.token; setTokenMenu(null); if (onTokenPatch) onTokenPatch(t, { locked: !t.locked }); }}>{tokenMenu.token.locked ? '🔓 Desbloquear' : '🔒 Bloquear'}</button>
             )}
             {isMaster && (

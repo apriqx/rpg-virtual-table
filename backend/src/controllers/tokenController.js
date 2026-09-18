@@ -53,9 +53,17 @@ async function getTokens(req, res) {
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar tokens' }); }
 }
 
+const TOKEN_ADMIN_FIELDS = ['type', 'characterId', 'ownerId', 'layer', 'visible', 'locked', 'snapToGrid', 'lightRadius', 'visionRadius'];
+
 async function updateToken(req, res) {
   try {
     const { tokenId, mapId, tableId } = req.params;
+    const membership = await prisma.tableMember.findUnique({ where: { tableId_userId: { tableId, userId: req.user.id } }, select: { role: true } });
+    const isMaster = req.user.role === 'ADMIN' || (membership && membership.role === 'MASTER');
+    const bodyKeys = Object.keys(req.body || {});
+    if (!isMaster && bodyKeys.some((k) => TOKEN_ADMIN_FIELDS.includes(k))) {
+      return res.status(403).json({ error: 'Campo administrativo do token: apenas o mestre pode alterar' });
+    }
     const { name, imageUrl, type, x, y, width, height, rotation, visible, locked, snapToGrid, layer, characterId, ownerId, displayName, showName, opacity, bars, statusMarkers } = req.body;
     const data = {};
     if (name !== undefined) data.name = name;

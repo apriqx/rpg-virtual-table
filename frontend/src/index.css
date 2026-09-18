@@ -1047,3 +1047,31 @@ body {
 .token-context-menu .tcm-group-btns button { background: #1a1a2e; border: 1px solid #2a2a3e; font-size: 11px; padding: 3px 7px; }
 .token-context-menu .tcm-group-btns button.active { background: #e94560; border-color: #e94560; color: #fff; }
 .tcm-backdrop { position: fixed; inset: 0; z-index: 40; }
+.modal.compact-sheet { max-width: 460px; width: 460px; max-height: 92vh; overflow-y: auto; }
+.cs-header { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; padding-right: 28px; }
+.cs-portrait { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; border: 1px solid #2a2a3e; }
+.cs-portrait-empty { display: flex; align-items: center; justify-content: center; background: #1a1a2e; color: #555; font-size: 24px; }
+.cs-titles h2 { margin: 0; }
+.cs-subtitle { color: #8be9fd; font-size: 13px; margin-top: 2px; }
+.cs-vitals { margin-bottom: 10px; }
+.cs-hp-bar { height: 14px; background: #1a1a2e; border-radius: 7px; overflow: hidden; border: 1px solid #2a2a3e; }
+.cs-hp-fill { height: 100%; transition: width 0.2s; }
+.cs-hp-text { font-size: 12px; color: #ccc; margin-top: 3px; }
+.cs-quick { display: flex; gap: 6px; margin-top: 8px; }
+.cs-quick-item { flex: 1; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.cs-abilities { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 10px; }
+.cs-ability { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 8px; padding: 5px 2px; display: flex; flex-direction: column; align-items: center; }
+.cs-label { font-size: 10px; color: #888; text-transform: uppercase; }
+.cs-value { font-size: 15px; font-weight: bold; color: #fff; }
+.cs-mod { font-size: 11px; color: #8be9fd; }
+.cs-section { border-top: 1px solid #2a2a3e; padding-top: 8px; margin-top: 8px; }
+.cs-section h4 { margin: 0 0 6px; color: #e94560; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+.cs-section h4 small { color: #666; font-weight: normal; text-transform: none; }
+.cs-attack { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 13px; }
+.cs-attack-name { flex: 1; color: #eee; }
+.cs-attack-bonus { color: #50fa7b; min-width: 34px; }
+.cs-attack-damage { color: #f1fa8c; }
+.cs-feature { font-size: 12px; color: #bbb; padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-empty { color: #666; font-size: 12px; font-style: italic; }
+.token-context-menu .tcm-disabled { opacity: 0.45; cursor: not-allowed; }
+.token-context-menu .tcm-disabled:hover { background: transparent; color: #ddd; }
