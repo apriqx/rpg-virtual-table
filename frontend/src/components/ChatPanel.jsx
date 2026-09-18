@@ -15,16 +15,39 @@ export default function ChatPanel({ tableId, userId, username, isMaster, isMuted
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [msgType, setMsgType] = useState('normal');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const scrollRef = useRef(null);
+  const scrollRestore = useRef(null);
+  const lastCount = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
-    api.chat.getMessages(tableId).then(setMessages).catch(() => {});
+    api.chat.getMessages(tableId).then((d) => {
+      const list = Array.isArray(d) ? d : [];
+      setMessages(list);
+      setHasMore(list.length >= 100);
+    }).catch(() => {});
   }, [tableId]);
+
+  async function loadOlder() {
+    if (loadingMore || messages.length === 0) return;
+    setLoadingMore(true);
+    const el = scrollRef.current;
+    if (el) scrollRestore.current = { top: el.scrollTop, height: el.scrollHeight };
+    try {
+      const older = await api.chat.getMessages(tableId, messages[0].createdAt);
+      const list = Array.isArray(older) ? older : [];
+      setHasMore(list.length >= 100);
+      setMessages((prev) => [...list.filter((o) => !prev.some((p) => p.id === o.id)), ...prev]);
+    } catch {}
+    setLoadingMore(false);
+  }
 
   useEffect(() => {
     const append = ({ message }) => {
@@ -34,13 +57,21 @@ export default function ChatPanel({ tableId, userId, username, isMaster, isMuted
     const offs = [
       onSocket('chat:message', append),
       onSocket('chat:whisper', append),
-      onSocket('chat:cleared', () => setMessages([])),
+      onSocket('chat:cleared', () => { setMessages([]); setHasMore(false); }),
     ];
     return () => offs.forEach((off) => off());
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    const el = scrollRef.current;
+    if (scrollRestore.current && el) {
+      const r = scrollRestore.current;
+      scrollRestore.current = null;
+      el.scrollTop = r.top + (el.scrollHeight - r.height);
+    } else if (messages.length !== lastCount.current && messages.length > lastCount.current) {
+      scrollToBottom();
+    }
+    lastCount.current = messages.length;
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
@@ -98,7 +129,12 @@ export default function ChatPanel({ tableId, userId, username, isMaster, isMuted
 
   return (
     <div className="chat-panel">
-      <div className="chat-messages">
+      <div className="chat-messages" ref={scrollRef}>
+        {hasMore && messages.length > 0 && (
+          <button type="button" className="chat-load-more" onClick={loadOlder} disabled={loadingMore}>
+            {loadingMore ? 'Carregando...' : '↑ Carregar mensagens antigas'}
+          </button>
+        )}
         {messages.map((msg) => {
           const isWhisperVisible = !msg.whisperTo ||
             msg.userId === userId ||

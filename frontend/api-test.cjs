@@ -184,6 +184,20 @@ async function main() {
   ok('roll de dados server-side', r.status === 201 && /\[\d+, \d+\] = \*\*\d+\*\*/.test(r.data.text));
   r = await req('PUT', `/tables/${tid}/members/${pUser.id}/mute`, { token: mTok, body: { muted: false } });
   ok('mestre desmuta player', r.status === 200 || r.status === 201);
+  r = await req('POST', `/tables/${tid}/chat`, { token: pTok, body: { type: 'dice', text: '/r 2d20kh1' } });
+  ok('vantagem kh1 -> total 1..20 e descarta um dado', r.status === 201 && (() => { const mm = r.data.text.match(/\*\*(\d+)\*\*/); return mm && Number(mm[1]) >= 1 && Number(mm[1]) <= 20 && r.data.text.includes('\u2717'); })());
+  r = await req('POST', `/tables/${tid}/chat`, { token: mTok, body: { type: 'dice', text: '/r 1d20+1d4+3' } });
+  ok('expressao composta -> total entre 5 e 27', r.status === 201 && (() => { const mm = r.data.text.match(/\*\*(\d+)\*\*/); return mm && Number(mm[1]) >= 5 && Number(mm[1]) <= 27; })());
+  r = await req('POST', `/tables/${tid}/chat`, { token: pTok, body: { type: 'dice', text: '/r 2d6kh1' } });
+  ok('2d6kh1 -> total 1..6 (mantem o maior)', r.status === 201 && (() => { const mm = r.data.text.match(/\*\*(\d+)\*\*/); return mm && Number(mm[1]) >= 1 && Number(mm[1]) <= 6 && r.data.text.includes('\u2717'); })());
+  r = await req('POST', `/tables/${tid}/chat`, { token: pTok, body: { type: 'dice', text: '/r 2d20kl1-1' } });
+  ok('desvantagem kl1 com modificador negativo', r.status === 201 && (() => { const mm = r.data.text.match(/\*\*(\d+)\*\*/); return mm && Number(mm[1]) >= 0 && Number(mm[1]) <= 19 && r.data.text.includes('\u2717'); })());
+  r = await req('GET', `/tables/${tid}/chat`, { token: pTok });
+  ok('historico do chat lista mensagens', r.status === 200 && Array.isArray(r.data) && r.data.length >= 4);
+  r = await req('GET', `/tables/${tid}/chat?before=` + encodeURIComponent(new Date(Date.now() + 60000).toISOString()), { token: pTok });
+  ok('paginacao before -> 200', r.status === 200 && Array.isArray(r.data));
+  r = await req('GET', `/tables/${tid}/chat?before=`, { token: pTok });
+  ok('paginacao before vazio -> 200 sem erro', r.status === 200 || r.status === 400);
 
   // ---- backup ----
   r = await req('GET', `/tables/${tid}/export`, { token: pTok });

@@ -125,24 +125,41 @@ async function createMessage(req, res) {
 }
 
 function parseDiceRoll(expr) {
-  const dicePattern = /^(\d+)?d(\d+)([+-]\d+)?$/i;
-  const match = expr.match(dicePattern);
-  if (!match) {
+  const clean = String(expr).toLowerCase().replace(/\s+/g, '');
+  const tokenRe = /([+-]?)((\d*)d(\d+)(?:(kh|kl)(\d+))?|(\d+))/g;
+  const parts = [];
+  let total = 0;
+  let matched = false;
+  let m;
+  while ((m = tokenRe.exec(clean)) !== null) {
+    matched = true;
+    const sign = m[1] === '-' ? -1 : 1;
+    if (m[3] !== undefined) {
+      const count = Math.max(1, Math.min(parseInt(m[3], 10) || 1, 100));
+      const sides = Math.max(2, Math.min(parseInt(m[4], 10), 1000));
+      const keepN = m[5] ? Math.max(1, Math.min(parseInt(m[6], 10) || 1, count)) : count;
+      const dice = [];
+      for (let i = 0; i < count; i++) dice.push(Math.floor(Math.random() * sides) + 1);
+      const dropIdx = new Set();
+      if (m[5]) {
+        const order = dice.map((v, i) => [v, i]).sort((a, b) => (m[5] === 'kl' ? a[0] - b[0] : b[0] - a[0]));
+        for (let i = keepN; i < order.length; i++) dropIdx.add(order[i][1]);
+      }
+      dice.forEach((v, i) => {
+        if (dropIdx.has(i)) { parts.push(v + '\u2717'); return; }
+        parts.push(String(v));
+        total += sign * v;
+      });
+    } else {
+      total += sign * parseInt(m[7], 10);
+    }
+  }
+  if (!matched) {
     const num = parseInt(expr, 10);
     if (!isNaN(num)) return { rolls: [num], total: num };
     return { rolls: [1], total: 1 };
   }
-  const count = Math.max(1, Math.min(parseInt(match[1] || '1', 10), 100));
-  const sides = Math.max(2, Math.min(parseInt(match[2], 10), 1000));
-  const modifier = parseInt(match[3] || '0', 10);
-  const rolls = [];
-  let sum = 0;
-  for (let i = 0; i < count; i++) {
-    const roll = Math.floor(Math.random() * sides) + 1;
-    rolls.push(roll);
-    sum += roll;
-  }
-  return { rolls, total: sum + modifier };
+  return { rolls: parts, total };
 }
 
 async function clearMessages(req, res) {

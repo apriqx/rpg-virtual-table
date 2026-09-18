@@ -1009,3 +1009,8 @@ body {
 .char-section { margin-bottom: 14px; }
 .char-section-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #44475a; padding-bottom: 4px; margin-bottom: 6px; }
 .char-section-header h3 { margin: 0; font-size: 13px; color: #8be9fd; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* --- Carregar mensagens antigas --- */
+.chat-load-more { display: block; margin: 6px auto; padding: 3px 10px; font-size: 11px; background: #2a2a3e; color: #8be9fd; border: 1px solid #44475a; border-radius: 10px; cursor: pointer; }
+.chat-load-more:hover { background: #34344c; }
+.chat-load-more:disabled { opacity: 0.6; cursor: default; }

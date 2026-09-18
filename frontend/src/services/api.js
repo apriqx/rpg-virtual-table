@@ -33,7 +33,7 @@ const grid = { get: async (tableId, mapId) => { const r = await api.get(`/tables
 
 const fog = { getAll: async (tableId, mapId) => { const r = await api.get(`/tables/${tableId}/maps/${mapId}/fog`); return r.data; }, create: async (tableId, mapId, data) => { const r = await api.post(`/tables/${tableId}/maps/${mapId}/fog`, data); return r.data; }, update: async (tableId, mapId, fogId, data) => { const r = await api.put(`/tables/${tableId}/maps/${mapId}/fog/${fogId}`, data); return r.data; }, remove: async (tableId, mapId, fogId) => { const r = await api.delete(`/tables/${tableId}/maps/${mapId}/fog/${fogId}`); return r.data; }, batchUpdate: async (tableId, mapId, regions) => { const r = await api.put(`/tables/${tableId}/maps/${mapId}/fog/batch`, { regions }); return r.data; }, };
 
-const chat = { getMessages: async (tableId) => { const r = await api.get(`/tables/${tableId}/chat`); return r.data; }, send: async (tableId, data) => { const r = await api.post(`/tables/${tableId}/chat`, data); return r.data; }, clear: async (tableId) => { const r = await api.delete(`/tables/${tableId}/chat`); return r.data; }, };
+const chat = { getMessages: async (tableId, before) => { const r = await api.get(`/tables/${tableId}/chat`, before ? { params: { before } } : undefined); return r.data; }, send: async (tableId, data) => { const r = await api.post(`/tables/${tableId}/chat`, data); return r.data; }, clear: async (tableId) => { const r = await api.delete(`/tables/${tableId}/chat`); return r.data; }, };
 
 const characters = {
   getAll: async (tableId) => { const r = await api.get(`/tables/${tableId}/characters`); return r.data; },

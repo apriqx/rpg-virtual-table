@@ -132,6 +132,7 @@ export default function Dnd5eSheetBody({ editData, setField, editing, tableId, o
             <span className="dnd-ability-name">{a.name}</span>
             <input type="number" min={1} max={30} value={ab[a.key] ?? 10} disabled={dis} onChange={(e) => setAb(a.key, Number(e.target.value) || 10)} />
             <span className="dnd-mod">{fmt(mod(ab[a.key]))}</span>
+            {rollBtn('1d20' + fmt(mod(ab[a.key])), 'Teste de habilidade: ' + a.name)}
             <label className="dnd-save"><input type="checkbox" checked={!!sp[a.key]} disabled={dis} onChange={(e) => setSaveProf(a.key, e.target.checked)} /> {fmt(saveTotal(a.key))}</label>
             {rollBtn('1d20' + fmt(saveTotal(a.key)), 'Teste de resistência: ' + a.name)}
           </div>
@@ -153,7 +154,7 @@ export default function Dnd5eSheetBody({ editData, setField, editing, tableId, o
         <div className="dnd-combat-col">
           <div className="dnd-combat-boxes">
             <div className="dnd-box"><label>CA</label><input type="number" value={cb.ac ?? 10} disabled={dis} onChange={(e) => setField('combat', { ...cb, ac: Number(e.target.value) || 0 })} /></div>
-            <div className="dnd-box"><label>Iniciativa</label><span className="dnd-computed">{fmt(mod(ab.des))}</span></div>
+            <div className="dnd-box"><label>Iniciativa</label><span className="dnd-computed">{fmt(mod(ab.des))}</span>{rollBtn('1d20' + fmt(mod(ab.des)), 'Iniciativa')}</div>
             <div className="dnd-box"><label>Deslocamento</label><input type="number" min={0} value={cb.deslocamento ?? 9} disabled={dis} onChange={(e) => setField('combat', { ...cb, deslocamento: Number(e.target.value) || 0 })} /></div>
             <div className="dnd-box"><label>Bônus de Prof.</label><span className="dnd-computed">{fmt(pb)}</span></div>
             <div className="dnd-box"><label>Percepção Passiva</label><span className="dnd-computed">{passivePerception}</span></div>
@@ -180,6 +181,7 @@ export default function Dnd5eSheetBody({ editData, setField, editing, tableId, o
               </select>
               <span>CD: <strong>{8 + pb + mod(ab[sc.ability || 'int'])}</strong></span>
               <span>Ataque: <strong>{fmt(pb + mod(ab[sc.ability || 'int']))}</strong></span>
+              {rollBtn('1d20' + fmt(pb + mod(ab[sc.ability || 'int'])), 'Ataque com magia')}
             </div>
             <div className="dnd-slots">
               {(sc.slots || []).map((v, i) => {
