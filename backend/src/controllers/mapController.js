@@ -86,9 +86,27 @@ async function getMap(req, res) {
 async function updateMap(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { name, active } = req.body;
+    const { name, active, width, height } = req.body;
     const data = {};
-    if (name !== undefined) data.name = name;
+    if (name !== undefined && String(name).trim()) data.name = String(name).trim().slice(0, 100);
+    if (width !== undefined && width !== '') { const w = parseInt(width, 10); if (w > 0) data.width = w; }
+    if (height !== undefined && height !== '') { const h = parseInt(height, 10); if (h > 0) data.height = h; }
+    if (req.file) {
+      if (cloudinaryEnabled) {
+        try {
+          const result = await uploadToCloudinary(req.file.path, req.file.originalname);
+          data.imageUrl = result.secure_url;
+        } catch (e) {
+          console.error('Cloudinary upload falhou:', e.message);
+          return res.status(500).json({ error: 'Erro no upload para a nuvem' });
+        } finally {
+          removeLocalFile(req.file.path);
+        }
+      } else {
+        data.imageUrl = '/uploads/' + req.file.filename;
+      }
+      data.mediaType = getMediaType(req.file.filename);
+    }
     if (active !== undefined) {
       const setActive = active === 'true' || active === true;
       if (setActive) { const map = await prisma.map.findUnique({ where: { id: mapId } }); if (map) await prisma.map.updateMany({ where: { tableId: map.tableId, active: true }, data: { active: false } }); }
@@ -101,6 +119,59 @@ async function updateMap(req, res) {
   } catch (error) { res.status(500).json({ error: 'Erro ao atualizar mapa' }); }
 }
 
+async function duplicateMap(req, res) {
+  try {
+    const { mapId, tableId } = req.params;
+    const src = await prisma.map.findUnique({
+      where: { id: mapId },
+      include: {
+        tokens: { include: { permissions: true } },
+        gridConfig: true,
+        fogRegions: true,
+        drawings: true,
+        annotations: true,
+      },
+    });
+    if (!src || src.tableId !== tableId) return res.status(404).json({ error: 'Mapa nao encontrado' });
+    const copy = await prisma.$transaction(async (tx) => {
+      const map = await tx.map.create({
+        data: {
+          tableId, name: (src.name + ' (copia)').slice(0, 100), imageUrl: src.imageUrl,
+          bgImageUrl: src.bgImageUrl, fgImageUrl: src.fgImageUrl, mediaType: src.mediaType,
+          width: src.width, height: src.height, active: false,
+        },
+      });
+      for (const t of src.tokens) {
+        const { id, mapId: _m, permissions, ...tdata } = t;
+        const nt = await tx.token.create({ data: { ...tdata, mapId: map.id } });
+        for (const p of permissions) {
+          const { id: _pi, tokenId: _ti, ...pdata } = p;
+          await tx.tokenPermission.create({ data: { ...pdata, tokenId: nt.id } });
+        }
+      }
+      if (src.gridConfig) {
+        const { id, mapId: _g, ...g } = src.gridConfig;
+        await tx.gridConfig.create({ data: { ...g, mapId: map.id } });
+      }
+      for (const f of src.fogRegions) {
+        const { id, mapId: _f, ...fr } = f;
+        await tx.fogRegion.create({ data: { ...fr, mapId: map.id } });
+      }
+      for (const d of src.drawings) {
+        const { id, mapId: _d, ...dr } = d;
+        await tx.drawing.create({ data: { ...dr, mapId: map.id } });
+      }
+      for (const a of src.annotations) {
+        const { id, mapId: _a, ...an } = a;
+        await tx.annotation.create({ data: { ...an, mapId: map.id } });
+      }
+      return tx.map.findUnique({ where: { id: map.id } });
+    });
+    broadcastToTable(tableId, 'map:created', { map: copy });
+    res.status(201).json({ map: copy });
+  } catch (error) { console.error('Erro ao duplicar mapa:', error); res.status(500).json({ error: 'Erro ao duplicar mapa' }); }
+}
+
 async function deleteMap(req, res) {
   try {
     const { mapId, tableId } = req.params;
@@ -110,4 +181,4 @@ async function deleteMap(req, res) {
   } catch (error) { res.status(500).json({ error: 'Erro ao excluir mapa' }); }
 }
 
-module.exports = { uploadMap, getMaps, getMap, updateMap, deleteMap };
+module.exports = { uploadMap, getMaps, getMap, updateMap, duplicateMap, deleteMap };

@@ -81,6 +81,15 @@ async function main() {
   r = await req('POST', `/tables/${tid}/maps`, { token: mTok, body: { name: 'Mapa T', imageUrl: 'https://example.com/m.jpg', width: 800, height: 600, active: true } });
   ok('criar mapa (JSON) -> 201', r.status === 201 && !!r.data.map);
   const mid = r.data.map.id;
+  r = await req('PUT', `/tables/${tid}/maps/${mid}`, { token: mTok, body: { name: 'Mapa Renomeado', width: 1024, height: 768 } });
+  ok('editar mapa (nome/tamanho) -> 200', r.status === 200 && r.data.name === 'Mapa Renomeado' && r.data.width === 1024);
+  r = await req('POST', `/tables/${tid}/maps/${mid}/duplicate`, { token: mTok });
+  ok('duplicar mapa -> 201 com (copia)', r.status === 201 && r.data.map && String(r.data.map.name).includes('copia') && r.data.map.width === 1024);
+  const dupId = r.data.map ? r.data.map.id : null;
+  r = await req('GET', `/tables/${tid}/maps`, { token: mTok });
+  const mapList = Array.isArray(r.data) ? r.data : [];
+  ok('lista de mapas tem original + copia', mapList.length >= 2 && mapList.some((m) => m.id === mid) && mapList.some((m) => m.id === dupId));
+  if (dupId) await req('DELETE', `/tables/${tid}/maps/${dupId}`, { token: mTok });
   r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'GM Token', x: 10, y: 10, layer: 5 } });
   ok('mestre cria token camada 5 -> 201', r.status === 201 && r.data.token.layer === 5);
   const hiddenId = r.data.token.id;

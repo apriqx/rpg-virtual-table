@@ -997,3 +997,10 @@ body {
 .dnd-slot-max { width: 42px !important; margin-left: 2px; }
 .dnd-slot-max-txt { color: #6272a4; font-size: 11px; margin-left: 2px; }
 .dnd-slots-hint { display: block; color: #6272a4; margin-top: 2px; }
+
+/* --- Acoes do item de mapa (editar/duplicar/excluir) --- */
+.map-actions { display: none; gap: 2px; }
+.map-item:hover .map-actions { display: inline-flex; }
+.map-act { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 3px; border-radius: 4px; line-height: 1; }
+.map-act:hover { background: rgba(233, 69, 96, 0.25); }
+.map-delete:hover { background: rgba(255, 85, 85, 0.35); }
