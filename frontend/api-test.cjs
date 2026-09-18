@@ -92,6 +92,14 @@ async function main() {
   const mapList = Array.isArray(r.data) ? r.data : [];
   ok('lista de mapas tem original + copia', mapList.length >= 2 && mapList.some((m) => m.id === mid) && mapList.some((m) => m.id === dupId));
   if (dupId) await req('DELETE', `/tables/${tid}/maps/${dupId}`, { token: mTok });
+  r = await req('POST', `/tables/${tid}/maps`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/a.jpg', width: 800, height: 600 } });
+  ok('criar mapa por URL -> 201', r.status === 201 && r.data.map && r.data.map.imageUrl === 'https://exemplo.com/a.jpg' && r.data.map.mediaType === 'image');
+  const urlMapId = r.data.map ? r.data.map.id : null;
+  r = await req('PUT', `/tables/${tid}/maps/${urlMapId}`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/b.jpg' } });
+  ok('editar mapa trocando URL', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg');
+  r = await req('PUT', `/tables/${tid}/maps/${urlMapId}`, { token: mTok, body: { name: 'Mapa URL Renomeado' } });
+  ok('salvar sem tocar imagem mantem URL', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg' && r.data.name === 'Mapa URL Renomeado');
+  if (urlMapId) await req('DELETE', `/tables/${tid}/maps/${urlMapId}`, { token: mTok });
   r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: mTok, body: { mapId: mid } });
   ok('mestre define mapa do membro', r.status === 200 && r.data.activeMapId === mid);
   r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: pTok, body: { mapId: null } });
@@ -117,6 +125,22 @@ async function main() {
   ok('jogador nao cria token -> 403', r.status === 403);
   r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: mTok, body: { ownerId: 'nobody', lightRadius: 120 } });
   ok('update token com ownerId invalido nao quebra', r.status === 200 || r.status === 500);
+
+  // ---- neblina: formas (quadrado/circulo/poligono) ----
+  r = await req('POST', `/tables/${tid}/maps/${mid}/fog`, { token: mTok, body: { x: 10, y: 10, width: 100, height: 100, revealed: true, shape: 'circle' } });
+  ok('regiao de neblina circulo -> 201', r.status === 201 && r.data.shape === 'circle');
+  const fogCircleId = r.data.id;
+  r = await req('POST', `/tables/${tid}/maps/${mid}/fog`, { token: mTok, body: { x: 0, y: 0, width: 50, height: 50, revealed: true, shape: 'polygon', points: [[0, 0], [40, 10], [30, 50], [5, 35]] } });
+  ok('regiao poligono com pontos -> 201', r.status === 201 && r.data.shape === 'polygon' && Array.isArray(r.data.points) && r.data.points.length === 4);
+  const fogPolyId = r.data.id;
+  r = await req('POST', `/tables/${tid}/maps/${mid}/fog`, { token: mTok, body: { x: 1, y: 1, width: 5, height: 5, revealed: true, shape: 'estrela' } });
+  ok('shape invalido cai para rect', r.status === 201 && r.data.shape === 'rect');
+  r = await req('GET', `/tables/${tid}/maps/${mid}/fog`, { token: pTok });
+  ok('jogador ve regioes reveladas com shape', r.status === 200 && Array.isArray(r.data) && r.data.some((f) => f.id === fogCircleId && f.shape === 'circle') && r.data.some((f) => f.id === fogPolyId && Array.isArray(f.points) && f.points.length === 4));
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/fog/batch`, { token: mTok, body: { regions: [{ x: 5, y: 5, width: 60, height: 60, revealed: true, shape: 'circle' }, { x: 0, y: 0, width: 10, height: 10, revealed: true, shape: 'polygon', points: [[0, 0], [10, 5], [5, 10]] }] } });
+  ok('batch preserva shape/points', r.status === 200 && Array.isArray(r.data) && r.data.some((f) => f.shape === 'circle') && r.data.some((f) => f.shape === 'polygon' && Array.isArray(f.points) && f.points.length === 3));
+  r = await req('GET', `/tables/${tid}/maps/${mid}/fog`, { token: mTok });
+  ok('mestre ve neblina apos batch', r.status === 200 && r.data.length === 2);
 
   // ---- fichas ----
   r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'NPC Teste', system: 'dnd5e', data: { level: 3, hp: { current: 10, max: 20, temp: 0 } } } });

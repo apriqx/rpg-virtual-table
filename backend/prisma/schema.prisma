@@ -182,6 +182,8 @@ model FogOfWarRegion {
   width    Float
   height   Float
   revealed Boolean @default(false)
+  shape    String  @default("rect")
+  points   Json?
 }
 
 model Drawing {

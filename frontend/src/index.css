@@ -1014,3 +1014,12 @@ body {
 .chat-load-more { display: block; margin: 6px auto; padding: 3px 10px; font-size: 11px; background: #2a2a3e; color: #8be9fd; border: 1px solid #44475a; border-radius: 10px; cursor: pointer; }
 .chat-load-more:hover { background: #34344c; }
 .chat-load-more:disabled { opacity: 0.6; cursor: default; }
+
+/* --- Controles de neblina (modo/formato/tamanho) --- */
+.fog-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 6px 10px; background: #1a1a2e; border: 1px solid #44475a; border-radius: 6px; margin-bottom: 6px; }
+.fog-mode-label { font-size: 12px; color: #aaa; }
+.fog-mode-reveal { color: #50fa7b; }
+.fog-mode-hide { color: #ff5555; }
+.fog-shape-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #ccc; }
+.fog-shape-label select { background: #2a2a3e; color: #eee; border: 1px solid #44475a; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+.fog-free-hint { color: #f1fa8c; font-size: 11px; }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Stage, Layer, Rect, Line, Image as KonvaImage, Text, Group, Circle, Arrow } from 'react-konva';
+import { Stage, Layer, Rect, Line, Image as KonvaImage, Text, Group, Circle, Ellipse, Arrow } from 'react-konva';
 import React from 'react';
 import { resolveUrl } from '../services/api';
 
@@ -48,7 +48,7 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   );
 });
 
-function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId }) {
+function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId }) {
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [stageScale, setStageScale] = useState(1);
@@ -68,6 +68,11 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStroke, setCurrentStroke] = useState([]);
+
+  const [fogPreview, setFogPreview] = useState(null);
+  const [freePoints, setFreePoints] = useState([]);
+
+  useEffect(() => { setFreePoints([]); setFogPreview(null); }, [currentTool, fogShape]);
 
   useEffect(() => {
     const container = containerRef.current; if (!container) return;
@@ -124,7 +129,10 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
     }
     if (isMeasuring) { const pos = getPointerPos(e); if (pos) setMeasureEnd(pos); }
     if (isDrawing) { const pos = getPointerPos(e); if (pos) setCurrentStroke((s) => [...s, pos]); }
-  }, [getPointerPos, isMeasuring, isDrawing]);
+    if (isMaster && fogShape !== 'free' && (currentTool === 'fogReveal' || currentTool === 'fogHide')) { setFogPreview(getPointerPos(e)); }
+  }, [getPointerPos, isMeasuring, isDrawing, isMaster, fogShape, currentTool]);
+
+  const handleStageMouseLeave = useCallback(() => { setFogPreview(null); }, []);
 
   const handleMouseUp = useCallback(async (e) => {
     isPanning.current = false; lastPointerPos.current = null;
@@ -184,22 +192,29 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
       const pos = getPointerPos(e); if (!pos) return;
       const snapped = snapToGrid(null, pos.x, pos.y); onAddToken(snapped.x, snapped.y);
     }
-    if (currentTool === 'fogReveal' && isMaster) {
+    if ((currentTool === 'fogReveal' || currentTool === 'fogHide') && isMaster) {
       const pos = getPointerPos(e); if (!pos) return;
+      const reveal = currentTool === 'fogReveal';
+      if (fogShape === 'free') {
+        if (freePoints.length >= 3 && Math.hypot(pos.x - freePoints[0].x, pos.y - freePoints[0].y) <= 12 / stageScale) {
+          const xs = freePoints.map((p) => p.x); const ys = freePoints.map((p) => p.y);
+          const minX = Math.min(...xs); const minY = Math.min(...ys);
+          const region = { id: Date.now().toString(), x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY, shape: 'polygon', points: freePoints.map((p) => [Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100]), revealed: true };
+          if (reveal) onFogUpdate([...fogRegions, region]);
+          else onFogUpdate(fogRegions.filter((r) => !(r.x + r.width <= region.x || region.x + region.width <= r.x || r.y + r.height <= region.y || region.y + region.height <= r.y)));
+          setFreePoints([]);
+          return;
+        }
+        setFreePoints((p) => [...p, pos]);
+        return;
+      }
       const half = brushSize / 2;
-      onFogUpdate([...fogRegions, { id: Date.now().toString(), x: pos.x - half, y: pos.y - half, width: brushSize, height: brushSize, revealed: true }]);
+      const region = { id: Date.now().toString(), x: pos.x - half, y: pos.y - half, width: brushSize, height: brushSize, revealed: true };
+      if (fogShape === 'circle') region.shape = 'circle';
+      if (reveal) onFogUpdate([...fogRegions, region]);
+      else onFogUpdate(fogRegions.filter((r) => !(r.x + r.width <= region.x || region.x + region.width <= r.x || r.y + r.height <= region.y || region.y + region.height <= r.y)));
     }
-    if (currentTool === 'fogHide' && isMaster) {
-      const pos = getPointerPos(e); if (!pos) return;
-      const half = brushSize / 2;
-      const hideRect = { x: pos.x - half, y: pos.y - half, w: brushSize, h: brushSize };
-      const updated = fogRegions.filter((r) => {
-        const overlap = !(r.x + r.width <= hideRect.x || hideRect.x + hideRect.w <= r.x || r.y + r.height <= hideRect.y || hideRect.y + hideRect.h <= r.y);
-        return !overlap;
-      });
-      onFogUpdate(updated);
-    }
-  }, [currentTool, isMaster, getPointerPos, snapToGrid, onAddToken, onFogUpdate, fogRegions, brushSize, onAnnotationCreated, drawings, annotations, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated]);
+  }, [currentTool, isMaster, getPointerPos, snapToGrid, onAddToken, onFogUpdate, fogRegions, brushSize, fogShape, freePoints, stageScale, onAnnotationCreated, drawings, annotations, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated]);
 
   const gridLines = useMemo(() => {
     if (!gridConfig.visible) return [];
@@ -247,7 +262,7 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
-      <Stage ref={stageRef} width={containerSize.width} height={containerSize.height} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onClick={handleStageClick} draggable={currentTool === 'move'} style={{ cursor: currentTool === 'move' ? 'grab' : currentTool === 'draw' ? 'crosshair' : currentTool === 'measure' ? 'crosshair' : currentTool === 'annotate' ? 'text' : currentTool === 'erase' ? 'pointer' : 'default' }}>
+      <Stage ref={stageRef} width={containerSize.width} height={containerSize.height} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleStageMouseLeave} onClick={handleStageClick} draggable={currentTool === 'move'} style={{ cursor: currentTool === 'move' ? 'grab' : currentTool === 'draw' ? 'crosshair' : currentTool === 'measure' ? 'crosshair' : currentTool === 'annotate' ? 'text' : currentTool === 'erase' ? 'pointer' : (currentTool === 'fogReveal' || currentTool === 'fogHide') ? 'crosshair' : 'default' }}>
         <Layer listening={false}>
           {mapImageSource ? <KonvaImage image={mapImageSource} width={map.width} height={map.height} /> : <Rect width={map.width} height={map.height} fill="#2a2a3e" />}
         </Layer>
@@ -261,10 +276,39 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
         <Layer listening={false}>
           <Rect x={0} y={0} width={map.width} height={map.height} fill="black" opacity={0.7} globalCompositeOperation="source-over" />
           <Group globalCompositeOperation="destination-out">
-            {fogRegions.filter((r) => r.revealed).map((r, i) => (<Rect key={r.id || i} x={r.x} y={r.y} width={r.width} height={r.height} fill="white" />))}
+            {fogRegions.filter((r) => r.revealed).map((r, i) => {
+              if (r.shape === 'circle') return <Ellipse key={r.id || i} x={r.x + r.width / 2} y={r.y + r.height / 2} radiusX={r.width / 2} radiusY={r.height / 2} fill="white" />;
+              const pts = Array.isArray(r.points) ? r.points : null;
+              if (r.shape === 'polygon' && pts && pts.length >= 3) return <Line key={r.id || i} points={pts.flatMap((p) => p)} closed fill="white" stroke="white" strokeWidth={1} lineJoin="round" />;
+              return <Rect key={r.id || i} x={r.x} y={r.y} width={r.width} height={r.height} fill="white" />;
+            })}
             {tokens.filter((t) => (t.lightRadius || 0) > 0 && !masquerade).map((t) => (<Circle key={`light-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={t.lightRadius} fill="white" />))}
           </Group>
         </Layer>
+        {isMaster && (currentTool === 'fogReveal' || currentTool === 'fogHide') && (
+          <Layer listening={false}>
+            {(() => {
+              const color = currentTool === 'fogReveal' ? '#50fa7b' : '#ff5555';
+              const sw = 1.5 / stageScale;
+              return (
+                <>
+                  {fogShape === 'square' && fogPreview && (
+                    <Rect x={fogPreview.x - brushSize / 2} y={fogPreview.y - brushSize / 2} width={brushSize} height={brushSize} stroke={color} strokeWidth={sw} dash={[6 / stageScale, 4 / stageScale]} fill={color} opacity={0.2} />
+                  )}
+                  {fogShape === 'circle' && fogPreview && (
+                    <Circle x={fogPreview.x} y={fogPreview.y} radius={brushSize / 2} stroke={color} strokeWidth={sw} dash={[6 / stageScale, 4 / stageScale]} fill={color} opacity={0.2} />
+                  )}
+                  {fogShape === 'free' && freePoints.length > 0 && (
+                    <Group>
+                      <Line points={freePoints.flatMap((p) => [p.x, p.y])} stroke={color} strokeWidth={sw} dash={[6 / stageScale, 4 / stageScale]} lineJoin="round" />
+                      {freePoints.map((p, i) => (<Circle key={i} x={p.x} y={p.y} radius={(i === 0 ? 7 : 4) / stageScale} fill={i === 0 ? '#f1fa8c' : color} />))}
+                    </Group>
+                  )}
+                </>
+              );
+            })()}
+          </Layer>
+        )}
         {(isMeasuring || currentTool === 'measure') && measureStart && measureEnd && (
           <Layer listening={false}>
             <Line points={[measureStart.x, measureStart.y, measureEnd.x, measureEnd.y]} stroke="#f1fa8c" strokeWidth={2} dash={[8, 4]} />

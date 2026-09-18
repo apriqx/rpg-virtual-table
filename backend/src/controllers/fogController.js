@@ -23,13 +23,16 @@ async function getFogRegions(req, res) {
 async function createFogRegion(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { x, y, width, height, revealed } = req.body;
+    const { x, y, width, height, revealed, shape, points } = req.body;
+    const finalShape = ['rect', 'circle', 'polygon'].includes(shape) ? shape : 'rect';
     const region = await prisma.fogOfWarRegion.create({
       data: {
         mapId,
         x: parseFloat(x), y: parseFloat(y),
         width: parseFloat(width), height: parseFloat(height),
         revealed: revealed !== undefined ? revealed : false,
+        shape: finalShape,
+        points: finalShape === 'polygon' && Array.isArray(points) && points.length >= 3 ? points : null,
       },
     });
     broadcastToTable(tableId, 'fog:updated', { mapId });
@@ -42,13 +45,18 @@ async function createFogRegion(req, res) {
 async function updateFogRegion(req, res) {
   try {
     const { fogId, tableId } = req.params;
-    const { x, y, width, height, revealed } = req.body;
+    const { x, y, width, height, revealed, shape, points } = req.body;
     const data = {};
     if (x !== undefined) data.x = parseFloat(x);
     if (y !== undefined) data.y = parseFloat(y);
     if (width !== undefined) data.width = parseFloat(width);
     if (height !== undefined) data.height = parseFloat(height);
     if (revealed !== undefined) data.revealed = revealed;
+    if (shape !== undefined && ['rect', 'circle', 'polygon'].includes(shape)) {
+      data.shape = shape;
+      if (shape !== 'polygon') data.points = null;
+    }
+    if (points !== undefined) data.points = Array.isArray(points) && points.length >= 3 ? points : null;
     const region = await prisma.fogOfWarRegion.update({ where: { id: fogId }, data });
     broadcastToTable(tableId, 'fog:updated', { mapId: region.mapId });
     res.json(region);
@@ -78,12 +86,17 @@ async function batchUpdateFog(req, res) {
       await tx.fogOfWarRegion.deleteMany({ where: { mapId } });
       if (regions.length > 0) {
         await tx.fogOfWarRegion.createMany({
-          data: regions.map((r) => ({
-            mapId,
-            x: parseFloat(r.x), y: parseFloat(r.y),
-            width: parseFloat(r.width), height: parseFloat(r.height),
-            revealed: r.revealed !== undefined ? r.revealed : false,
-          })),
+          data: regions.map((r) => {
+            const sh = ['rect', 'circle', 'polygon'].includes(r.shape) ? r.shape : 'rect';
+            return {
+              mapId,
+              x: parseFloat(r.x), y: parseFloat(r.y),
+              width: parseFloat(r.width), height: parseFloat(r.height),
+              revealed: r.revealed !== undefined ? r.revealed : false,
+              shape: sh,
+              points: sh === 'polygon' && Array.isArray(r.points) && r.points.length >= 3 ? r.points : null,
+            };
+          }),
         });
       }
     });

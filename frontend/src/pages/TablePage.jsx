@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
+import api, { resolveUrl } from '../services/api';
 import { connectSocket, disconnectSocket, onSocket, emitSocket } from '../services/socket';
 const MapCanvas = lazy(() => import('../components/MapCanvas'));
 import Toolbar from '../components/Toolbar';
@@ -82,6 +82,7 @@ export default function TablePage() {
   const [mapFile, setMapFile] = useState(null);
   const [addMemberForm, setAddMemberForm] = useState({ username: '', role: 'PLAYER' });
   const [brushSize, setBrushSize] = useState(50);
+  const [fogShape, setFogShape] = useState('square');
 
   const isMaster = user.role === 'ADMIN' || members.some(
     (m) => (m.userId === user.id || m.user?.id === user.id) && m.role === 'MASTER'
@@ -204,7 +205,7 @@ export default function TablePage() {
 
   function openEditMap(m) {
     setEditingMap(m);
-    setEditMapForm({ name: m.name, width: m.width, height: m.height });
+    setEditMapForm({ name: m.name, width: m.width, height: m.height, imageUrl: m.imageUrl || '' });
     setEditMapFile(null);
   }
 
@@ -251,6 +252,7 @@ export default function TablePage() {
     e.preventDefault();
     try {
       let updated;
+      const urlVal = (editMapForm.imageUrl || '').trim();
       if (editMapFile) {
         const fd = new FormData();
         fd.append('name', editMapForm.name);
@@ -258,6 +260,8 @@ export default function TablePage() {
         fd.append('height', editMapForm.height);
         fd.append('image', editMapFile);
         updated = await api.maps.update(tableId, editingMap.id, fd);
+      } else if (urlVal && urlVal !== (editingMap.imageUrl || '')) {
+        updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height), imageUrl: urlVal });
       } else {
         updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height) });
       }
@@ -274,7 +278,7 @@ export default function TablePage() {
 
   async function handleFogUpdate(nr) {
     setFogRegions(nr);
-    try { await api.fog.batchUpdate(tableId, activeMap.id, nr.map((r) => ({ id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, revealed: r.revealed }))); } catch { loadMapData(activeMap.id); }
+    try { await api.fog.batchUpdate(tableId, activeMap.id, nr.map((r) => ({ id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, revealed: r.revealed, shape: r.shape || 'rect', points: Array.isArray(r.points) ? r.points : null }))); } catch { loadMapData(activeMap.id); }
   }
 
   function handleAddToken(x, y) { setTokenClickPos({ x, y }); setEditingToken(null); setShowTokenModal(true); }
@@ -457,7 +461,7 @@ export default function TablePage() {
 
       <div className="canvas-container">
         {isMaster && <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} isMaster={isMaster} gridVisible={gridConfig.visible} onToggleGrid={handleToggleGrid} onOpenGridSettings={() => setShowGridModal(true)} onOpenTokenDialog={() => { setTokenClickPos({ x: 100, y: 100 }); setEditingToken(null); setShowTokenModal(true); }} onEditToken={handleEditToken} onDeleteToken={handleDeleteToken} onClearDrawings={handleClearDrawings} drawColor={drawColor} onDrawColorChange={setDrawColor} />}
-        {(currentTool === 'fogReveal' || currentTool === 'fogHide') && isMaster && <FogControls brushSize={brushSize} onBrushSizeChange={setBrushSize} onRevealAll={handleRevealAll} onHideAll={handleHideAll} />}
+        {(currentTool === 'fogReveal' || currentTool === 'fogHide') && isMaster && <FogControls fogMode={currentTool} fogShape={fogShape} onFogShapeChange={setFogShape} brushSize={brushSize} onBrushSizeChange={setBrushSize} onRevealAll={handleRevealAll} onHideAll={handleHideAll} />}
         <div className="tools-row">
           <DiceRoller tableId={tableId} onClose={showDice ? () => setShowDice(false) : undefined} />
           <button className={'btn btn-sm ' + (showDice ? 'btn-primary' : '')} onClick={() => setShowDice(!showDice)}>{showDice ? '▲ Dados' : '▼ Dados'}</button>
@@ -466,7 +470,7 @@ export default function TablePage() {
         </div>
         {activeMap ? (
           <Suspense fallback={<div className="loading">Carregando mapa...</div>}>
-            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} />
+            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} />
           </Suspense>
         ) : <div className="empty-state">{isMaster ? 'Envie um mapa para comecar' : 'Nenhum mapa disponivel'}</div>}
       </div>
@@ -478,7 +482,7 @@ export default function TablePage() {
 
       {showUploadModal && (<div className="modal-overlay" onClick={() => { setShowUploadModal(false); setMapFile(null); }}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>×</button><h2>Adicionar Mapa</h2><form onSubmit={handleUploadMap}><div className="form-group"><label>Nome</label><input value={uploadForm.name} onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })} required /></div><div className="form-group"><label>Arquivo do mapa</label><input type="file" accept="image/*,video/*" onChange={(e) => setMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Imagens (JPG, PNG, WebP) ou videos (MP4, WebM) - ate 50MB</small></div><div className="form-group"><label>URL do mapa (se nao enviar arquivo)</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={uploadForm.imageUrl} onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} /></div><div className="form-group"><label>Largura (px)</label><input type="number" value={uploadForm.width} onChange={(e) => setUploadForm({ ...uploadForm, width: Number(e.target.value) })} min={100} /></div><div className="form-group"><label>Altura (px)</label><input type="number" value={uploadForm.height} onChange={(e) => setUploadForm({ ...uploadForm, height: Number(e.target.value) })} min={100} /></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
       {assignMapModal && (<div className="modal-overlay" onClick={() => setAssignMapModal(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setAssignMapModal(null)}>×</button><h2>Jogadores em "{assignMapModal.name}"</h2><p style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Cada jogador ve apenas o mapa em que foi colocado. Sem atribuicao, ele segue o mapa ativo da mesa.</p>{members.filter((mm) => mm.role !== 'MASTER').map((mm) => { const mu = mm.user || mm; const uid = mm.userId || mu.id; return (<label key={uid} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}><input type="checkbox" checked={assignSel.has(uid)} onChange={() => toggleAssign(uid)} /><span>{mu.username}</span></label>); })}{members.filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa ainda.</p>}<div className="modal-actions"><button type="button" className="btn btn-sm" onClick={assignAll}>Todos</button><button type="button" className="btn btn-sm" onClick={assignNone}>Ninguem</button><button type="button" className="btn btn-secondary" onClick={() => setAssignMapModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? 'Salvando...' : 'Salvar'}</button></div></div></div>)}
-      {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual</small></div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
+      {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video por arquivo (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual. Se escolher um arquivo, ele tem prioridade sobre a URL.</small></div><div className="form-group"><label>URL da imagem</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={editMapForm.imageUrl || ''} onChange={(e) => setEditMapForm({ ...editMapForm, imageUrl: e.target.value })} /><small style={{ color: '#aaa' }}>{editMapFile ? 'Um arquivo foi escolhido: ele substituira a imagem ao salvar.' : 'Eh a imagem atual deste mapa. Altere para trocar por outra URL; mantenha para preservar.'}</small>{!editMapFile && editMapForm.imageUrl && <img src={resolveUrl(editMapForm.imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} onError={(ev) => { ev.target.style.display = 'none'; }} />}</div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
       {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} />}
       {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} onSave={handleSaveGrid} />}
       {showPermModal && selectedToken && <PermissionDialog open={showPermModal} onClose={() => { setShowPermModal(false); setSelectedToken(null); }} token={selectedToken} members={members} tableId={tableId} mapId={activeMap.id} onSave={handleSavePermissions} />}

@@ -106,6 +106,10 @@ async function updateMap(req, res) {
         data.imageUrl = '/uploads/' + req.file.filename;
       }
       data.mediaType = getMediaType(req.file.filename);
+    } else if (req.body.imageUrl !== undefined && String(req.body.imageUrl).trim()) {
+      const urlVal = String(req.body.imageUrl).trim();
+      data.imageUrl = urlVal;
+      data.mediaType = urlVal.match(/\.(mp4|avi|webm|mov)(\?|$)/i) ? 'video' : 'image';
     }
     if (active !== undefined) {
       const setActive = active === 'true' || active === true;
