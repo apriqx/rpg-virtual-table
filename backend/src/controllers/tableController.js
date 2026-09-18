@@ -97,7 +97,7 @@ async function addMember(req, res) {
     const { userId, username, role } = req.body;
     let targetUserId = userId;
     if (!targetUserId && username) {
-      const targetUser = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+      const targetUser = await prisma.user.findFirst({ where: { OR: [{ username }, { email: username }] }, select: { id: true } });
       if (!targetUser) return res.status(404).json({ error: 'Usuario nao encontrado' });
       targetUserId = targetUser.id;
     }

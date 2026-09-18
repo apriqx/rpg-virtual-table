@@ -74,6 +74,8 @@ async function main() {
   ok('mesa nova nao aparece para quem nao e membro', !playerTables.some((t) => t.id === tid));
   r = await req('POST', `/tables/${tid}/members`, { token: mTok, body: { username: pUser.username, role: 'PLAYER' } });
   ok('adicionar membro -> 201/200', r.status === 200 || r.status === 201);
+  r = await req('POST', `/tables/${tid}/members`, { token: mTok, body: { username: 'spy@test.com', role: 'PLAYER' } });
+  ok('adicionar membro por e-mail -> 201', r.status === 201);
   r = await req('POST', `/tables/${tid}/members`, { token: pTok, body: { username: pUser.username, role: 'MASTER' } });
   ok('jogador nao pode adicionar membro -> 403', r.status === 403);
 
@@ -97,11 +99,16 @@ async function main() {
   r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: mTok, body: { mapId: null } });
   ok('limpar mapa do membro', r.status === 200 && r.data.activeMapId === null);
   r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'GM Token', x: 10, y: 10, layer: 5 } });
-  ok('mestre cria token camada 5 -> 201', r.status === 201 && r.data.token.layer === 5);
+  ok('mestre cria token camada 5 -> 201', r.status === 201 && r.data.token.layer === 5 && r.data.token.snapToGrid === true);
   const hiddenId = r.data.token.id;
   r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Visivel', x: 20, y: 20, lightRadius: 80 } });
   ok('token com lightRadius persiste', r.status === 201 && r.data.token.lightRadius === 80);
   const visibleId = r.data.token.id;
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Livre', x: 33, y: 44, snapToGrid: false } });
+  ok('token com snapToGrid=false persiste', r.status === 201 && r.data.token.snapToGrid === false);
+  const freeId = r.data.token.id;
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${freeId}`, { token: mTok, body: { snapToGrid: true, locked: true } });
+  ok('update snapToGrid/locked persiste', r.status === 200 && r.data.snapToGrid === true && r.data.locked === true);
   r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: pTok });
   const pTokens = Array.isArray(r.data) ? r.data : [];
   ok('jogador NAO recebe token camada 5', !pTokens.some((t) => t.id === hiddenId));
@@ -201,6 +208,7 @@ async function main() {
   // ---- limpeza ----
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${hiddenId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: mTok });
+  await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${freeId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/characters/${pCharId}`, { token: pTok });
   await req('DELETE', `/tables/${tid}/characters/${npcId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/characters/${monId}`, { token: mTok });

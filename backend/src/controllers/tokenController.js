@@ -14,9 +14,9 @@ function filterTokensForPlayer(tokens, userId) {
 async function createToken(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, ownerId, characterId, lightRadius } = req.body;
+    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, snapToGrid, ownerId, characterId, lightRadius } = req.body;
     const token = await prisma.token.create({
-      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, ownerId: ownerId || null, characterId: characterId || null, lightRadius: parseFloat(lightRadius) || 0 },
+      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: parseFloat(lightRadius) || 0 },
       include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } },
     });
     broadcastToTable(tableId, 'token:created', { token, mapId });
@@ -38,7 +38,7 @@ async function getTokens(req, res) {
 async function updateToken(req, res) {
   try {
     const { tokenId, mapId, tableId } = req.params;
-    const { name, imageUrl, type, x, y, width, height, rotation, visible, locked, layer, characterId, ownerId } = req.body;
+    const { name, imageUrl, type, x, y, width, height, rotation, visible, locked, snapToGrid, layer, characterId, ownerId } = req.body;
     const data = {};
     if (name !== undefined) data.name = name;
     if (ownerId !== undefined) data.ownerId = ownerId || null;
@@ -51,6 +51,7 @@ async function updateToken(req, res) {
     if (rotation !== undefined) data.rotation = parseFloat(rotation);
     if (visible !== undefined) data.visible = visible;
     if (locked !== undefined) data.locked = locked;
+    if (snapToGrid !== undefined) data.snapToGrid = snapToGrid;
     if (layer !== undefined) data.layer = parseInt(layer, 10);
     if (characterId !== undefined) data.characterId = characterId;
     if (req.body.lightRadius !== undefined) data.lightRadius = parseFloat(req.body.lightRadius);

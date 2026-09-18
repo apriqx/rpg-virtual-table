@@ -134,6 +134,7 @@ model Token {
   layer        Int        @default(2)
   visible      Boolean    @default(true)
   locked       Boolean    @default(false)
+  snapToGrid   Boolean    @default(true)
   lightRadius  Float      @default(0)
   ownerId      String?
   characterId  String?

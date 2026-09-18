@@ -13,7 +13,7 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
     } else { setImg(null); }
   }, [token.imageUrl]);
 
-  function handleDragEnd(e) { const x = e.target.x(); const y = e.target.y(); const snapped = snapToGrid(x, y); onDragEnd(token.id, snapped.x, snapped.y); }
+  function handleDragEnd(e) { const x = e.target.x(); const y = e.target.y(); const snapped = snapToGrid(token, x, y); onDragEnd(token.id, snapped.x, snapped.y); }
   function handleClick(e) { e.cancelBubble = true; onClick(token.id); }
 
   const isMasterLayer = token.layer === 5;
@@ -136,7 +136,8 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
     } else { setIsDrawing(false); }
   }, [isMeasuring, isDrawing, measureEnd, currentStroke, drawColor, onDrawingCreated]);
 
-  const snapToGrid = useCallback((x, y) => {
+  const snapToGrid = useCallback((token, x, y) => {
+    if (token && token.snapToGrid === false) return { x, y };
     if (!gridConfig.snapToGrid) return { x, y };
     const cs = gridConfig.cellSize;
     return { x: Math.round((x - gridConfig.offsetX) / cs) * cs + gridConfig.offsetX, y: Math.round((y - gridConfig.offsetY) / cs) * cs + gridConfig.offsetY };
@@ -181,7 +182,7 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
     }
     if (currentTool === 'addToken' && isMaster) {
       const pos = getPointerPos(e); if (!pos) return;
-      const snapped = snapToGrid(pos.x, pos.y); onAddToken(snapped.x, snapped.y);
+      const snapped = snapToGrid(null, pos.x, pos.y); onAddToken(snapped.x, snapped.y);
     }
     if (currentTool === 'fogReveal' && isMaster) {
       const pos = getPointerPos(e); if (!pos) return;

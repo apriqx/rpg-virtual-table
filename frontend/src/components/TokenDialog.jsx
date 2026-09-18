@@ -9,6 +9,8 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
   const [height, setHeight] = useState(40);
   const [layer, setLayer] = useState(2);
   const [visible, setVisible] = useState(true);
+  const [locked, setLocked] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(true);
   const [lightRadius, setLightRadius] = useState(0);
   const [ownerId, setOwnerId] = useState('');
   const [characterId, setCharacterId] = useState('');
@@ -31,9 +33,9 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
   useEffect(() => {
     if (!open) return;
     if (token) {
-      setName(token.name || ''); setType(token.type || 'character'); setImageUrl(token.imageUrl || ''); setWidth(token.width || 40); setHeight(token.height || 40); setLayer(token.layer || 2); setVisible(token.visible !== false); setLightRadius(token.lightRadius || 0); setOwnerId(token.ownerId || ''); setCharacterId(token.characterId || '');
+      setName(token.name || ''); setType(token.type || 'character'); setImageUrl(token.imageUrl || ''); setWidth(token.width || 40); setHeight(token.height || 40); setLayer(token.layer || 2); setVisible(token.visible !== false); setLocked(token.locked === true); setSnapToGrid(token.snapToGrid !== false); setLightRadius(token.lightRadius || 0); setOwnerId(token.ownerId || ''); setCharacterId(token.characterId || '');
     } else {
-      setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLightRadius(0); setOwnerId(''); setCharacterId('');
+      setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setOwnerId(''); setCharacterId('');
     }
   }, [open, token]);
 
@@ -41,8 +43,8 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSubmit({ name, type, imageUrl: imageUrl || null, width, height, layer, visible, lightRadius: Number(lightRadius) || 0, ownerId: ownerId || null, characterId: characterId || null });
-    if (!token) { setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLightRadius(0); setOwnerId(''); setCharacterId(''); }
+    onSubmit({ name, type, imageUrl: imageUrl || null, width, height, layer, visible, locked, snapToGrid, lightRadius: Number(lightRadius) || 0, ownerId: ownerId || null, characterId: characterId || null });
+    if (!token) { setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setOwnerId(''); setCharacterId(''); }
   }
 
   return (
@@ -60,6 +62,8 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
           <div className="form-group"><label>Camada</label><select value={layer} onChange={(e) => setLayer(Number(e.target.value))}><option value={2}>Personagens / Objetos</option><option value={5}>Camada do Mestre</option></select></div>
           <div className="form-group"><label>Raio de luz (px, 0 = sem luz)</label><input type="number" value={lightRadius} onChange={(e) => setLightRadius(Number(e.target.value))} min={0} max={500} /><small style={{ color: '#aaa' }}>Ilumina a neblina ao redor do token (apenas com Masquerade OFF).</small></div>
           <div className="form-group"><label><input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} /> Visivel para jogadores</label></div>
+          <div className="form-group"><label><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} /> Travado (nao pode ser movido)</label></div>
+          <div className="form-group"><label><input type="checkbox" checked={snapToGrid} onChange={(e) => setSnapToGrid(e.target.checked)} /> Encaixar na grade ao mover</label></div>
           <div className="form-group"><label>Dono</label><select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}><option value="">Nenhum</option>{members.map((m) => { const u = m.user || m; return <option key={u.id} value={u.id}>{u.username}</option>; })}</select></div>
           <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button><button type="submit" className="btn btn-primary">{token ? 'Salvar' : 'Criar'}</button></div>
         </form>
