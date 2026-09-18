@@ -40,6 +40,7 @@ export default function TablePage() {
   const [loading, setLoading] = useState(true);
   const [currentTool, setCurrentTool] = useState('select');
   const [selectedToken, setSelectedToken] = useState(null);
+  const [selectedTokenIds, setSelectedTokenIds] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [showChat, setShowChat] = useState(true);
   const showChatRef = useRef(true);
@@ -71,7 +72,7 @@ export default function TablePage() {
   const [showPermModal, setShowPermModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [editingMap, setEditingMap] = useState(null);
-  const [editMapForm, setEditMapForm] = useState({ name: '', width: 1920, height: 1080 });
+  const [editMapForm, setEditMapForm] = useState({ name: '', width: 1920, height: 1080, darkMode: false });
   const [editMapFile, setEditMapFile] = useState(null);
   const [assignMapModal, setAssignMapModal] = useState(null);
   const [assignSel, setAssignSel] = useState(() => new Set());
@@ -205,7 +206,7 @@ export default function TablePage() {
 
   function openEditMap(m) {
     setEditingMap(m);
-    setEditMapForm({ name: m.name, width: m.width, height: m.height, imageUrl: m.imageUrl || '' });
+      setEditMapForm({ name: m.name, width: m.width, height: m.height, imageUrl: m.imageUrl || '', darkMode: m.darkMode === true });
     setEditMapFile(null);
   }
 
@@ -258,12 +259,13 @@ export default function TablePage() {
         fd.append('name', editMapForm.name);
         fd.append('width', editMapForm.width);
         fd.append('height', editMapForm.height);
+        fd.append('darkMode', editMapForm.darkMode ? 'true' : 'false');
         fd.append('image', editMapFile);
         updated = await api.maps.update(tableId, editingMap.id, fd);
       } else if (urlVal && urlVal !== (editingMap.imageUrl || '')) {
-        updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height), imageUrl: urlVal });
+        updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height), darkMode: Boolean(editMapForm.darkMode), imageUrl: urlVal });
       } else {
-        updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height) });
+        updated = await api.maps.update(tableId, editingMap.id, { name: editMapForm.name, width: Number(editMapForm.width), height: Number(editMapForm.height), darkMode: Boolean(editMapForm.darkMode) });
       }
       setMaps((p) => p.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
       if (activeMap?.id === updated.id) setActiveMap((p) => ({ ...p, ...updated }));
@@ -271,9 +273,23 @@ export default function TablePage() {
     } catch { alert('Erro ao salvar mapa'); }
   }
 
-  async function handleTokenMove(tokenId, x, y) {
-    setTokens((p) => p.map((t) => t.id === tokenId ? { ...t, x, y } : t));
-    try { await api.tokens.update(tableId, activeMap.id, tokenId, { x, y }); } catch { loadMapData(activeMap.id); }
+  const tokensRef = useRef([]);
+  useEffect(() => { tokensRef.current = tokens; }, [tokens]);
+  const undoStackRef = useRef([]);
+  const clipboardRef = useRef(null);
+
+  function pushUndo(action) { undoStackRef.current.push(action); if (undoStackRef.current.length > 30) undoStackRef.current.shift(); }
+
+  async function handleTokenMove(moves) {
+    const prevItems = [];
+    for (const m of moves) {
+      const t = tokensRef.current.find((x) => x.id === m.id);
+      if (t && (t.x !== m.x || t.y !== m.y)) prevItems.push({ id: m.id, x: t.x, y: t.y });
+    }
+    if (prevItems.length > 0) pushUndo({ type: 'move', items: prevItems });
+    const ids = new Set(moves.map((m) => m.id));
+    setTokens((p) => p.map((t) => { const m = moves.find((mm) => mm.id === t.id); return m ? { ...t, x: m.x, y: m.y } : t; }));
+    try { await Promise.all(moves.map((m) => api.tokens.update(tableId, activeMap.id, m.id, { x: m.x, y: m.y }))); } catch { loadMapData(activeMap.id); }
   }
 
   async function handleFogUpdate(nr) {
@@ -353,16 +369,91 @@ export default function TablePage() {
     function onKeyDown(e) {
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (!selectedToken || !activeMap || showTokenModal || showPermModal) return;
+      if (!activeMap || showTokenModal || showPermModal) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); applyUndo(); return; }
+      if (mod && (e.key === 'c' || e.key === 'C')) { handleCopyTokens(); return; }
+      if (mod && (e.key === 'v' || e.key === 'V')) { if (isMaster) { e.preventDefault(); handlePasteTokens(); } return; }
+      if (mod && (e.key === 'd' || e.key === 'D')) {
+        if (isMaster && selectedTokenIds.length > 0) { e.preventDefault(); for (const id of selectedTokenIds) { const t = tokensRef.current.find((x) => x.id === id); if (t) handleTokenDuplicate(t); } }
+        return;
+      }
       if (e.key === 'Delete') {
-        if (isMaster || canControlToken(selectedToken)) { e.preventDefault(); handleDeleteToken(); }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
-        if (isMaster) { e.preventDefault(); handleTokenDuplicate(selectedToken); }
+        if (selectedTokenIds.length > 1) { e.preventDefault(); handleDeleteSelected(); }
+        else if (selectedToken && (isMaster || canControlToken(selectedToken))) { e.preventDefault(); handleDeleteToken(); }
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   });
+
+  function handleSelectionChange(ids) {
+    setSelectedTokenIds(ids);
+    const list = tokensRef.current.filter((t) => ids.includes(t.id));
+    const last = list[list.length - 1];
+    if (last) setSelectedToken(last);
+  }
+
+  function handleCopyTokens() {
+    if (!isMaster || !activeMap || selectedTokenIds.length === 0) return;
+    clipboardRef.current = tokensRef.current.filter((t) => selectedTokenIds.includes(t.id)).map((t) => ({ ...t }));
+  }
+
+  async function handlePasteTokens() {
+    if (!isMaster || !activeMap || !clipboardRef.current || clipboardRef.current.length === 0) return;
+    const created = [];
+    try {
+      for (const t of clipboardRef.current) {
+        const d = await api.tokens.create(tableId, activeMap.id, {
+          name: t.name, imageUrl: t.imageUrl, type: t.type,
+          x: (t.x || 0) + 20, y: (t.y || 0) + 20,
+          width: t.width, height: t.height, rotation: t.rotation, layer: t.layer,
+          visible: t.visible, locked: false, snapToGrid: t.snapToGrid,
+          lightRadius: t.lightRadius, visionRadius: t.visionRadius,
+          displayName: t.displayName, showName: t.showName, opacity: t.opacity,
+          bars: Array.isArray(t.bars) ? JSON.parse(JSON.stringify(t.bars)) : [],
+          statusMarkers: Array.isArray(t.statusMarkers) ? JSON.parse(JSON.stringify(t.statusMarkers)) : [],
+          ownerId: t.ownerId, characterId: t.characterId,
+        });
+        created.push(d.token);
+      }
+      if (created.length > 0) {
+        pushUndo({ type: 'create', ids: created.map((c) => c.id) });
+        setTokens((p) => [...p, ...created]);
+      }
+    } catch { alert('Erro ao colar tokens'); }
+  }
+
+  function applyUndo() {
+    const act = undoStackRef.current.pop();
+    if (!act || !activeMap) return;
+    if (act.type === 'move') {
+      setTokens((p) => p.map((t) => { const m = act.items.find((i) => i.id === t.id); return m ? { ...t, x: m.x, y: m.y } : t; }));
+      for (const i of act.items) { api.tokens.update(tableId, activeMap.id, i.id, { x: i.x, y: i.y }).catch(() => {}); }
+    } else if (act.type === 'create') {
+      setTokens((p) => p.filter((t) => !act.ids.includes(t.id)));
+      for (const id of act.ids) { api.tokens.remove(tableId, activeMap.id, id).catch(() => {}); }
+    } else if (act.type === 'delete' && isMaster) {
+      (async () => {
+        for (const t of act.tokens) {
+          try {
+            const d = await api.tokens.create(tableId, activeMap.id, { name: t.name, imageUrl: t.imageUrl, type: t.type, x: t.x + 12, y: t.y + 12, width: t.width, height: t.height, rotation: t.rotation, layer: t.layer, visible: t.visible, locked: t.locked, snapToGrid: t.snapToGrid, lightRadius: t.lightRadius, visionRadius: t.visionRadius, displayName: t.displayName, showName: t.showName, opacity: t.opacity, bars: Array.isArray(t.bars) ? t.bars : [], statusMarkers: Array.isArray(t.statusMarkers) ? t.statusMarkers : [], ownerId: t.ownerId, characterId: t.characterId });
+            setTokens((p) => [...p, d.token]);
+          } catch {}
+        }
+      })();
+    }
+  }
+
+  async function handleDeleteSelected() {
+    const list = tokensRef.current.filter((t) => selectedTokenIds.includes(t.id) && (isMaster || canControlToken(t)));
+    if (list.length === 0) return;
+    if (!window.confirm('Excluir ' + list.length + ' tokens selecionados?')) return;
+    if (isMaster) pushUndo({ type: 'delete', tokens: list.map((t) => ({ ...t })) });
+    setTokens((p) => p.filter((t) => !list.some((r) => r.id === t.id)));
+    setSelectedTokenIds([]); setSelectedToken(null);
+    try { await Promise.all(list.map((t) => api.tokens.remove(tableId, activeMap.id, t.id))); } catch { loadMapData(activeMap.id); }
+  }
 
   async function handleAddMember(e) {
     e.preventDefault();
@@ -516,7 +607,7 @@ export default function TablePage() {
         </div>
         {activeMap ? (
           <Suspense fallback={<div className="loading">Carregando mapa...</div>}>
-            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} onTokenEdit={handleEditToken} onTokenDuplicate={handleTokenDuplicate} onTokenPatch={handleTokenPatch} onTokenDelete={handleTokenDeleteFromMenu} onTokenPermissions={openTokenPermissions} canControlToken={canControlToken} />
+            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} onTokenEdit={handleEditToken} onTokenDuplicate={handleTokenDuplicate} onTokenPatch={handleTokenPatch} onTokenDelete={handleTokenDeleteFromMenu} onTokenPermissions={openTokenPermissions} canControlToken={canControlToken} onSelectionChange={handleSelectionChange} />
           </Suspense>
         ) : <div className="empty-state">{isMaster ? 'Envie um mapa para comecar' : 'Nenhum mapa disponivel'}</div>}
       </div>
@@ -528,7 +619,7 @@ export default function TablePage() {
 
       {showUploadModal && (<div className="modal-overlay" onClick={() => { setShowUploadModal(false); setMapFile(null); }}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>×</button><h2>Adicionar Mapa</h2><form onSubmit={handleUploadMap}><div className="form-group"><label>Nome</label><input value={uploadForm.name} onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })} required /></div><div className="form-group"><label>Arquivo do mapa</label><input type="file" accept="image/*,video/*" onChange={(e) => setMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Imagens (JPG, PNG, WebP) ou videos (MP4, WebM) - ate 50MB</small></div><div className="form-group"><label>URL do mapa (se nao enviar arquivo)</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={uploadForm.imageUrl} onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} /></div><div className="form-group"><label>Largura (px)</label><input type="number" value={uploadForm.width} onChange={(e) => setUploadForm({ ...uploadForm, width: Number(e.target.value) })} min={100} /></div><div className="form-group"><label>Altura (px)</label><input type="number" value={uploadForm.height} onChange={(e) => setUploadForm({ ...uploadForm, height: Number(e.target.value) })} min={100} /></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
       {assignMapModal && (<div className="modal-overlay" onClick={() => setAssignMapModal(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setAssignMapModal(null)}>×</button><h2>Jogadores em "{assignMapModal.name}"</h2><p style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Cada jogador ve apenas o mapa em que foi colocado. Sem atribuicao, ele segue o mapa ativo da mesa.</p>{members.filter((mm) => mm.role !== 'MASTER').map((mm) => { const mu = mm.user || mm; const uid = mm.userId || mu.id; return (<label key={uid} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}><input type="checkbox" checked={assignSel.has(uid)} onChange={() => toggleAssign(uid)} /><span>{mu.username}</span></label>); })}{members.filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa ainda.</p>}<div className="modal-actions"><button type="button" className="btn btn-sm" onClick={assignAll}>Todos</button><button type="button" className="btn btn-sm" onClick={assignNone}>Ninguem</button><button type="button" className="btn btn-secondary" onClick={() => setAssignMapModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? 'Salvando...' : 'Salvar'}</button></div></div></div>)}
-      {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video por arquivo (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual. Se escolher um arquivo, ele tem prioridade sobre a URL.</small></div><div className="form-group"><label>URL da imagem</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={editMapForm.imageUrl || ''} onChange={(e) => setEditMapForm({ ...editMapForm, imageUrl: e.target.value })} /><small style={{ color: '#aaa' }}>{editMapFile ? 'Um arquivo foi escolhido: ele substituira a imagem ao salvar.' : 'Eh a imagem atual deste mapa. Altere para trocar por outra URL; mantenha para preservar.'}</small>{!editMapFile && editMapForm.imageUrl && <img src={resolveUrl(editMapForm.imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} onError={(ev) => { ev.target.style.display = 'none'; }} />}</div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
+      {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video por arquivo (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual. Se escolher um arquivo, ele tem prioridade sobre a URL.</small></div><div className="form-group"><label>URL da imagem</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={editMapForm.imageUrl || ''} onChange={(e) => setEditMapForm({ ...editMapForm, imageUrl: e.target.value })} /><small style={{ color: '#aaa' }}>{editMapFile ? 'Um arquivo foi escolhido: ele substituira a imagem ao salvar.' : 'Eh a imagem atual deste mapa. Altere para trocar por outra URL; mantenha para preservar.'}</small>{!editMapFile && editMapForm.imageUrl && <img src={resolveUrl(editMapForm.imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} onError={(ev) => { ev.target.style.display = 'none'; }} />}</div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="form-group"><label><input type="checkbox" checked={Boolean(editMapForm.darkMode)} onChange={(e) => setEditMapForm({ ...editMapForm, darkMode: e.target.checked })} /> Modo escuro (visao no escuro)</label><small style={{ color: '#aaa' }}>Quando ativo, cada token visivel ilumina a neblina ao redor de si: 6 celulas por padrao, ou o raio de visao proprio do token, se definido.</small></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
       {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} cellSize={gridConfig.cellSize} onOpenPermissions={openTokenPermissions} />}
       {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} onSave={handleSaveGrid} />}
       {showPermModal && selectedToken && <PermissionDialog open={showPermModal} onClose={() => { setShowPermModal(false); setSelectedToken(null); }} token={selectedToken} members={members} tableId={tableId} mapId={activeMap.id} onSave={handleSavePermissions} />}

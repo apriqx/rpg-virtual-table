@@ -15,7 +15,7 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   }, [token.imageUrl]);
 
   function handleDragEnd(e) { const x = e.target.x(); const y = e.target.y(); const snapped = snapToGrid(token, x, y); onDragEnd(token.id, snapped.x, snapped.y); }
-  function handleClick(e) { e.cancelBubble = true; onClick(token.id); }
+  function handleClick(e) { e.cancelBubble = true; onClick(token.id, e); }
   function handleContext(e) { e.cancelBubble = true; if (onContextMenu) onContextMenu(token, e); }
   function handleMenu(e) { e.cancelBubble = true; if (onMenuOpen) onMenuOpen(token, e); }
 
@@ -91,13 +91,15 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   );
 });
 
-function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken }) {
+function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken, onSelectionChange }) {
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [stageScale, setStageScale] = useState(1);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const [mapImage, setMapImage] = useState(null);
-  const [selectedTokenId, setSelectedTokenId] = useState(null);
+  const [selectedTokenIds, setSelectedTokenIds] = useState([]);
+  const [marquee, setMarquee] = useState(null);
+  const marqueeMoved = useRef(false);
   const videoRef = useRef(null);
   const videoCanvasRef = useRef(null);
   const animFrameRef = useRef(null);
@@ -117,6 +119,8 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
   const [tokenMenu, setTokenMenu] = useState(null);
 
   useEffect(() => { setFreePoints([]); setFogPreview(null); }, [currentTool, fogShape]);
+
+  useEffect(() => { setSelectedTokenIds([]); setMarquee(null); if (onSelectionChange) onSelectionChange([]); }, [map.id]);
 
   useEffect(() => {
     const container = containerRef.current; if (!container) return;
@@ -162,6 +166,7 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
 
   const handleMouseDown = useCallback((e) => {
     if (e.evt.button === 1 || (currentTool === 'move' && e.evt.button === 0 && e.target === e.target.getStage())) { isPanning.current = true; lastPointerPos.current = { x: e.evt.clientX, y: e.evt.clientY }; }
+    if (currentTool === 'select' && e.evt.button === 0 && e.target === e.target.getStage()) { const pos = getPointerPos(e); if (pos) { marqueeMoved.current = false; setMarquee({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y }); } }
     if (currentTool === 'measure' && isMaster && e.evt.button === 0) { const pos = getPointerPos(e); if (pos) { setMeasureStart(pos); setMeasureEnd(pos); setIsMeasuring(true); } }
     if (currentTool === 'draw' && isMaster && e.evt.button === 0) { const pos = getPointerPos(e); if (pos) { setIsDrawing(true); setCurrentStroke([pos]); } }
   }, [currentTool, isMaster, getPointerPos]);
@@ -171,22 +176,41 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
       setStagePos((p) => ({ x: p.x + (e.evt.clientX - lastPointerPos.current.x), y: p.y + (e.evt.clientY - lastPointerPos.current.y) }));
       lastPointerPos.current = { x: e.evt.clientX, y: e.evt.clientY };
     }
+    if (marquee) {
+      const pos = getPointerPos(e);
+      if (pos) {
+        if (Math.abs(pos.x - marquee.x1) > 4 || Math.abs(pos.y - marquee.y1) > 4) marqueeMoved.current = true;
+        setMarquee((m) => (m ? { ...m, x2: pos.x, y2: pos.y } : m));
+      }
+    }
     if (isMeasuring) { const pos = getPointerPos(e); if (pos) setMeasureEnd(pos); }
     if (isDrawing) { const pos = getPointerPos(e); if (pos) setCurrentStroke((s) => [...s, pos]); }
     if (isMaster && fogShape !== 'free' && (currentTool === 'fogReveal' || currentTool === 'fogHide')) { setFogPreview(getPointerPos(e)); }
-  }, [getPointerPos, isMeasuring, isDrawing, isMaster, fogShape, currentTool]);
+  }, [getPointerPos, isMeasuring, isDrawing, isMaster, fogShape, currentTool, marquee]);
 
   const handleStageMouseLeave = useCallback(() => { setFogPreview(null); }, []);
 
   const handleMouseUp = useCallback(async (e) => {
     isPanning.current = false; lastPointerPos.current = null;
+    if (marquee) {
+      const rect = { x: Math.min(marquee.x1, marquee.x2), y: Math.min(marquee.y1, marquee.y2), width: Math.abs(marquee.x2 - marquee.x1), height: Math.abs(marquee.y2 - marquee.y1) };
+      setMarquee(null);
+      if (marqueeMoved.current && rect.width > 4 && rect.height > 4) {
+        const hits = tokens.filter((t) => t.x < rect.x + rect.width && t.x + t.width > rect.x && t.y < rect.y + rect.height && t.y + t.height > rect.y).map((t) => t.id);
+        setSelectedTokenIds(hits);
+        if (onSelectionChange) onSelectionChange(hits);
+      }
+      return;
+    }
     if (isMeasuring && measureEnd) { setIsMeasuring(false); setMeasureStart(null); setMeasureEnd(null); }
     if (isDrawing && currentStroke.length > 1) {
       setIsDrawing(false);
       try { await onDrawingCreated({ color: drawColor || '#e94560', lineWidth: 3, points: currentStroke }); } catch {}
       setCurrentStroke([]);
     } else { setIsDrawing(false); }
-  }, [isMeasuring, isDrawing, measureEnd, currentStroke, drawColor, onDrawingCreated]);
+  }, [marquee, tokens, onSelectionChange, isMeasuring, isDrawing, measureEnd, currentStroke, drawColor, onDrawingCreated]);
+
+  const getCanMove = useCallback((token) => { if (canMoveToken) return canMoveToken(token); return isMaster || !token.locked; }, [canMoveToken, isMaster]);
 
   const snapToGrid = useCallback((token, x, y) => {
     if (token && token.snapToGrid === false) return { x, y };
@@ -202,13 +226,34 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
       cx = Math.max(0, Math.min(map.width - t.width, x));
       cy = Math.max(0, Math.min(map.height - t.height, y));
     }
-    onTokenMove(tokenId, cx, cy);
-  }, [onTokenMove, tokens, map.width, map.height]);
-  const handleTokenClick = useCallback((tokenId) => { setSelectedTokenId(tokenId); onTokenSelect(tokenId); }, [onTokenSelect]);
+    const moves = [{ id: tokenId, x: cx, y: cy }];
+    if (selectedTokenIds.includes(tokenId) && selectedTokenIds.length > 1) {
+      const dx = cx - (t ? t.x : x); const dy = cy - (t ? t.y : y);
+      for (const id of selectedTokenIds) {
+        if (id === tokenId) continue;
+        const o = tokens.find((tk) => tk.id === id);
+        if (!o || !getCanMove(o) || o.locked) continue;
+        const snapped = snapToGrid(o, Math.max(0, Math.min(map.width - o.width, o.x + dx)), Math.max(0, Math.min(map.height - o.height, o.y + dy)));
+        moves.push({ id: o.id, x: snapped.x, y: snapped.y });
+      }
+    }
+    onTokenMove(moves);
+  }, [onTokenMove, tokens, map.width, map.height, selectedTokenIds, getCanMove, snapToGrid]);
+
+  const handleTokenClick = useCallback((tokenId, evt) => {
+    const shift = evt && evt.evt && (evt.evt.shiftKey || evt.evt.ctrlKey || evt.evt.metaKey);
+    setSelectedTokenIds((prev) => {
+      const next = shift ? (prev.includes(tokenId) ? prev.filter((id) => id !== tokenId) : [...prev, tokenId]) : [tokenId];
+      if (onSelectionChange) onSelectionChange(next);
+      return next;
+    });
+    onTokenSelect(tokenId);
+  }, [onTokenSelect, onSelectionChange]);
 
   const handleStageClick = useCallback((e) => {
     if (e.target !== e.target.getStage()) return;
-    setSelectedTokenId(null);
+    if (marqueeMoved.current) { marqueeMoved.current = false; return; }
+    if (selectedTokenIds.length > 0) { setSelectedTokenIds([]); if (onSelectionChange) onSelectionChange([]); }
     if (currentTool === 'select' && isMaster) {
       const pos = getPointerPos(e); if (!pos) return;
       const hitAnn = (annotations || []).find((a) => Math.hypot(a.x - pos.x, a.y - pos.y) < (a.fontSize || 16));
@@ -272,8 +317,6 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
   const playerTokens = useMemo(() => tokens.filter((t) => t.layer !== 5), [tokens]);
   const mapImageSource = isVideo && videoCanvasRef.current ? videoCanvasRef.current : mapImage;
 
-  const getCanMove = useCallback((token) => { if (canMoveToken) return canMoveToken(token); return isMaster || !token.locked; }, [canMoveToken, isMaster]);
-
   const openTokenMenu = useCallback((token, e) => {
     const container = containerRef.current;
     if (!container) return;
@@ -300,7 +343,7 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
   }, [canControlToken, isMaster, onTokenSelect, openTokenMenu]);
 
   const renderToken = (token) => (
-    <TokenComponent key={token.id} token={token} isSelected={selectedTokenId === token.id} isActive={activeTokenId === token.id} isMaster={isMaster} masquerade={masquerade} onDragEnd={handleTokenDragEnd} onClick={handleTokenClick} onContextMenu={handleTokenContextMenu} onMenuOpen={openTokenMenu} snapToGrid={snapToGrid} canMove={getCanMove(token)} />
+    <TokenComponent key={token.id} token={token} isSelected={selectedTokenIds.includes(token.id)} isActive={activeTokenId === token.id} isMaster={isMaster} masquerade={masquerade} onDragEnd={handleTokenDragEnd} onClick={handleTokenClick} onContextMenu={handleTokenContextMenu} onMenuOpen={openTokenMenu} snapToGrid={snapToGrid} canMove={getCanMove(token)} />
   );
 
   const measureDistance = useMemo(() => {
@@ -356,14 +399,15 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
               return <Rect key={r.id || i} x={r.x} y={r.y} width={r.width} height={r.height} fill="white" />;
             })}
             {tokens.filter((t) => (t.lightRadius || 0) > 0 && !masquerade).map((t) => (<Circle key={`light-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={t.lightRadius} fill="white" />))}
-            {tokens.filter((t) => (t.visionRadius || 0) > 0 && !masquerade).map((t) => {
+            {tokens.filter((t) => !masquerade && ((t.visionRadius || 0) > 0 || (map.darkMode && t.visible !== false))).map((t) => {
               const pxPerFt = (gridConfig.cellSize || 50) / (gridConfig.physicalSize || 1.5);
-              const r = t.visionRadius * pxPerFt;
+              const hasVision = (t.visionRadius || 0) > 0;
+              const r = hasVision ? t.visionRadius * pxPerFt : 6 * (gridConfig.cellSize || 50);
               return (
                 <Circle key={`vision-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={r}
                   fillRadialGradientStart={{ x: 0, y: 0 }} fillRadialGradientStartRadius={0}
                   fillRadialGradientEnd={{ x: 0, y: 0 }} fillRadialGradientEndRadius={r}
-                  fillRadialGradientColorStops={[0, 'rgba(255,255,255,1)', 0.55, 'rgba(255,255,255,0.85)', 1, 'rgba(255,255,255,0)']} />
+                  fillRadialGradientColorStops={hasVision ? [0, 'rgba(255,255,255,1)', 0.55, 'rgba(255,255,255,0.85)', 1, 'rgba(255,255,255,0)'] : [0, 'rgba(255,255,255,1)', 0.6, 'rgba(255,255,255,0.8)', 1, 'rgba(255,255,255,0)']} />
               );
             })}
           </Group>
@@ -390,6 +434,11 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
                 </>
               );
             })()}
+          </Layer>
+        )}
+        {marquee && (
+          <Layer listening={false}>
+            <Rect x={Math.min(marquee.x1, marquee.x2)} y={Math.min(marquee.y1, marquee.y2)} width={Math.abs(marquee.x2 - marquee.x1)} height={Math.abs(marquee.y2 - marquee.y1)} stroke="#4a9eff" strokeWidth={1.5 / stageScale} dash={[6 / stageScale, 4 / stageScale]} fill="rgba(74,158,255,0.12)" />
           </Layer>
         )}
         {(isMeasuring || currentTool === 'measure') && measureStart && measureEnd && (

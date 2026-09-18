@@ -92,13 +92,19 @@ async function main() {
   const mapList = Array.isArray(r.data) ? r.data : [];
   ok('lista de mapas tem original + copia', mapList.length >= 2 && mapList.some((m) => m.id === mid) && mapList.some((m) => m.id === dupId));
   if (dupId) await req('DELETE', `/tables/${tid}/maps/${dupId}`, { token: mTok });
-  r = await req('POST', `/tables/${tid}/maps`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/a.jpg', width: 800, height: 600 } });
-  ok('criar mapa por URL -> 201', r.status === 201 && r.data.map && r.data.map.imageUrl === 'https://exemplo.com/a.jpg' && r.data.map.mediaType === 'image');
+  r = await req('POST', `/tables/${tid}/maps`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/a.jpg', width: 800, height: 600, darkMode: true } });
+  ok('criar mapa por URL com modo escuro -> 201', r.status === 201 && r.data.map && r.data.map.imageUrl === 'https://exemplo.com/a.jpg' && r.data.map.mediaType === 'image' && r.data.map.darkMode === true);
   const urlMapId = r.data.map ? r.data.map.id : null;
-  r = await req('PUT', `/tables/${tid}/maps/${urlMapId}`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/b.jpg' } });
-  ok('editar mapa trocando URL', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg');
+  r = await req('PUT', `/tables/${tid}/maps/${urlMapId}`, { token: mTok, body: { name: 'Mapa URL', imageUrl: 'https://exemplo.com/b.jpg', darkMode: false } });
+  ok('editar mapa trocando URL e modo escuro', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg' && r.data.darkMode === false);
   r = await req('PUT', `/tables/${tid}/maps/${urlMapId}`, { token: mTok, body: { name: 'Mapa URL Renomeado' } });
-  ok('salvar sem tocar imagem mantem URL', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg' && r.data.name === 'Mapa URL Renomeado');
+  ok('salvar sem tocar imagem mantem URL e darkMode', r.status === 200 && r.data.imageUrl === 'https://exemplo.com/b.jpg' && r.data.name === 'Mapa URL Renomeado' && r.data.darkMode === false);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}`, { token: mTok, body: { darkMode: true } });
+  ok('ativar modo escuro no mapa principal', r.status === 200 && r.data.darkMode === true);
+  r = await req('POST', `/tables/${tid}/maps/${mid}/duplicate`, { token: mTok });
+  ok('duplicar mapa preserva modo escuro', r.status === 201 && r.data.map && r.data.map.darkMode === true);
+  const darkDupId = r.data.map ? r.data.map.id : null;
+  if (darkDupId) await req('DELETE', `/tables/${tid}/maps/${darkDupId}`, { token: mTok });
   if (urlMapId) await req('DELETE', `/tables/${tid}/maps/${urlMapId}`, { token: mTok });
   r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: mTok, body: { mapId: mid } });
   ok('mestre define mapa do membro', r.status === 200 && r.data.activeMapId === mid);
@@ -251,6 +257,8 @@ async function main() {
   ok('player nao exporta backup -> 403', r.status === 403);
   r = await req('GET', `/tables/${tid}/export`, { token: mTok });
   ok('export backup -> 200 v1', r.status === 200 && r.data.version === 1 && Array.isArray(r.data.maps));
+  const bkMap = (r.data.maps || []).find((m) => Array.isArray(m.tokens) && m.tokens.some((t) => t.snapToGrid !== undefined));
+  ok('export inclui campos novos de token e darkMode', Boolean(bkMap) && typeof bkMap.darkMode === 'boolean' && bkMap.tokens.every((t) => ['snapToGrid', 'visionRadius', 'displayName', 'showName', 'opacity', 'bars', 'statusMarkers'].every((k) => k in t)));
   r = await req('POST', `/tables/${tid}/import`, { token: mTok, body: { version: 2, maps: [] } });
   ok('import backup versao invalida -> 400', r.status === 400);
 

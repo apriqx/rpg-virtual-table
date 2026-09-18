@@ -104,6 +104,7 @@ model Map {
   table      Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
   name       String
   imageUrl   String
+  darkMode   Boolean @default(false)
   bgImageUrl String?
   fgImageUrl String?
   mediaType  String   @default("image")

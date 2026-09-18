@@ -22,7 +22,7 @@ function getMediaType(filename) {
 async function uploadMap(req, res) {
   try {
     const { tableId } = req.params;
-    const { name, width, height, active, imageUrl } = req.body;
+    const { name, width, height, active, imageUrl, darkMode } = req.body;
     let finalUrl = imageUrl || '';
     let mediaType = 'image';
     if (req.file) {
@@ -45,7 +45,7 @@ async function uploadMap(req, res) {
     else { if (finalUrl.match(/\.(mp4|avi|webm|mov)(\?|$)/i)) mediaType = 'video'; }
     const setActive = active === 'true' || active === true;
     if (setActive) await prisma.map.updateMany({ where: { tableId, active: true }, data: { active: false } });
-    const map = await prisma.map.create({ data: { tableId, name, imageUrl: finalUrl, mediaType, width: parseInt(width, 10) || 1920, height: parseInt(height, 10) || 1080, active: setActive } });
+    const map = await prisma.map.create({ data: { tableId, name, imageUrl: finalUrl, mediaType, darkMode: darkMode === 'true' || darkMode === true, width: parseInt(width, 10) || 1920, height: parseInt(height, 10) || 1080, active: setActive } });
     broadcastToTable(tableId, 'map:created', { map });
     if (setActive) broadcastToTable(tableId, 'map:switched', { mapId: map.id, tableId });
     res.status(201).json({ map });
@@ -55,7 +55,7 @@ async function uploadMap(req, res) {
 async function getMaps(req, res) {
   try {
     const { tableId } = req.params;
-    const maps = await prisma.map.findMany({ where: { tableId }, select: { id: true, name: true, imageUrl: true, mediaType: true, width: true, height: true, active: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
+    const maps = await prisma.map.findMany({ where: { tableId }, select: { id: true, name: true, imageUrl: true, mediaType: true, darkMode: true, width: true, height: true, active: true, createdAt: true }, orderBy: { createdAt: 'desc' } });
     res.json(maps);
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar mapas' }); }
 }
@@ -116,6 +116,7 @@ async function updateMap(req, res) {
       if (setActive) { const map = await prisma.map.findUnique({ where: { id: mapId } }); if (map) await prisma.map.updateMany({ where: { tableId: map.tableId, active: true }, data: { active: false } }); }
       data.active = setActive;
     }
+    if (req.body.darkMode !== undefined) data.darkMode = req.body.darkMode === 'true' || req.body.darkMode === true;
     const map = await prisma.map.update({ where: { id: mapId }, data });
     broadcastToTable(tableId, 'map:updated', { map });
     if (data.active) broadcastToTable(tableId, 'map:switched', { mapId: map.id, tableId });
@@ -142,6 +143,7 @@ async function duplicateMap(req, res) {
         data: {
           tableId, name: (src.name + ' (copia)').slice(0, 100), imageUrl: src.imageUrl,
           bgImageUrl: src.bgImageUrl, fgImageUrl: src.fgImageUrl, mediaType: src.mediaType,
+          darkMode: src.darkMode,
           width: src.width, height: src.height, active: false,
         },
       });

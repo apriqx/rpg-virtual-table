@@ -4,9 +4,9 @@ function pick(obj, keys) { const o = {}; for (const k of keys) o[k] = obj[k]; re
 function num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
 function clampStr(v, max) { return v == null ? null : String(v).slice(0, max); }
 
-const MAP_COLUMNS = ['name', 'imageUrl', 'bgImageUrl', 'fgImageUrl', 'mediaType', 'width', 'height'];
+const MAP_COLUMNS = ['name', 'imageUrl', 'bgImageUrl', 'fgImageUrl', 'mediaType', 'darkMode', 'width', 'height'];
 const GRID_COLUMNS = ['cellSize', 'physicalSize', 'visible', 'lineThickness', 'lineOpacity', 'offsetX', 'offsetY', 'snapToGrid'];
-const TOKEN_COLUMNS = ['name', 'imageUrl', 'type', 'x', 'y', 'width', 'height', 'rotation', 'layer', 'visible', 'locked', 'lightRadius'];
+const TOKEN_COLUMNS = ['name', 'imageUrl', 'type', 'x', 'y', 'width', 'height', 'rotation', 'layer', 'visible', 'locked', 'snapToGrid', 'lightRadius', 'visionRadius', 'displayName', 'showName', 'opacity'];
 
 async function exportTable(req, res) {
   try {
@@ -28,11 +28,13 @@ async function exportTable(req, res) {
       maps: maps.map((m) => ({
         ...pick(m, MAP_COLUMNS),
         gridConfig: m.gridConfig ? pick(m.gridConfig, GRID_COLUMNS) : null,
-        fogRegions: m.fogRegions.map((f) => pick(f, ['x', 'y', 'width', 'height', 'revealed'])),
+        fogRegions: m.fogRegions.map((f) => pick(f, ['x', 'y', 'width', 'height', 'revealed', 'shape', 'points'])),
         drawings: m.drawings.map((d) => pick(d, ['color', 'lineWidth', 'points', 'layer'])),
         annotations: m.annotations.map((a) => pick(a, ['text', 'x', 'y', 'color', 'fontSize'])),
         tokens: m.tokens.map((t) => ({
           ...pick(t, TOKEN_COLUMNS),
+          bars: t.bars === null || t.bars === undefined ? null : JSON.parse(JSON.stringify(t.bars)),
+          statusMarkers: t.statusMarkers === null || t.statusMarkers === undefined ? null : JSON.parse(JSON.stringify(t.statusMarkers)),
           ownerUsername: t.owner ? t.owner.username : null,
           characterIndex: t.characterId != null && charIndex.has(t.characterId) ? charIndex.get(t.characterId) : null,
           permissions: t.permissions.map((p) => ({ username: p.user ? p.user.username : null, canView: p.canView, canMove: p.canMove, canResize: p.canResize, canDelete: p.canDelete })).filter((p) => p.username),
@@ -62,7 +64,7 @@ async function importTable(req, res) {
       for (const m of body.maps) {
         if (!m || !m.name || !m.imageUrl) continue;
         const map = await tx.map.create({
-          data: { tableId, name: clampStr(m.name, 100), imageUrl: m.imageUrl, bgImageUrl: m.bgImageUrl || null, fgImageUrl: m.fgImageUrl || null, mediaType: m.mediaType === 'video' ? 'video' : 'image', width: parseInt(m.width, 10) || 1920, height: parseInt(m.height, 10) || 1080, active: false },
+          data: { tableId, name: clampStr(m.name, 100), imageUrl: m.imageUrl, bgImageUrl: m.bgImageUrl || null, fgImageUrl: m.fgImageUrl || null, mediaType: m.mediaType === 'video' ? 'video' : 'image', darkMode: m.darkMode === true, width: parseInt(m.width, 10) || 1920, height: parseInt(m.height, 10) || 1080, active: false },
         });
         mapCount++;
         if (m.gridConfig) {
@@ -70,7 +72,7 @@ async function importTable(req, res) {
           await tx.gridConfig.create({ data: { mapId: map.id, cellSize: num(g.cellSize, 40), physicalSize: num(g.physicalSize, 1.5), visible: g.visible !== false, lineThickness: num(g.lineThickness, 1), lineOpacity: num(g.lineOpacity, 0.5), offsetX: num(g.offsetX, 0), offsetY: num(g.offsetY, 0), snapToGrid: g.snapToGrid === true } });
         }
         for (const f of (m.fogRegions || [])) {
-          if ([f.x, f.y, f.width, f.height].every((v) => typeof v === 'number' && Number.isFinite(v))) await tx.fogOfWarRegion.create({ data: { mapId: map.id, x: f.x, y: f.y, width: f.width, height: f.height, revealed: f.revealed === true } });
+          if ([f.x, f.y, f.width, f.height].every((v) => typeof v === 'number' && Number.isFinite(v))) await tx.fogOfWarRegion.create({ data: { mapId: map.id, x: f.x, y: f.y, width: f.width, height: f.height, revealed: f.revealed === true, shape: ['rect', 'circle', 'polygon'].includes(f.shape) ? f.shape : 'rect', points: Array.isArray(f.points) ? f.points : null } });
         }
         for (const d of (m.drawings || [])) {
           if (Array.isArray(d.points)) await tx.drawing.create({ data: { mapId: map.id, color: d.color || '#e94560', lineWidth: num(d.lineWidth, 3), points: d.points, layer: parseInt(d.layer, 10) || 0 } });
@@ -81,7 +83,7 @@ async function importTable(req, res) {
         for (const t of (m.tokens || [])) {
           if (!t || !t.name) continue;
           const token = await tx.token.create({
-            data: { mapId: map.id, name: clampStr(t.name, 100), imageUrl: t.imageUrl || null, type: t.type || 'character', x: num(t.x, 0), y: num(t.y, 0), width: num(t.width, 40), height: num(t.height, 40), rotation: num(t.rotation, 0), layer: parseInt(t.layer, 10) || 2, visible: t.visible !== false, locked: t.locked === true, lightRadius: num(t.lightRadius, 0), ownerId: t.ownerUsername ? userByName.get(t.ownerUsername) || null : null, characterId: typeof t.characterIndex === 'number' && charIds[t.characterIndex] ? charIds[t.characterIndex] : null },
+            data: { mapId: map.id, name: clampStr(t.name, 100), imageUrl: t.imageUrl || null, type: t.type || 'character', x: num(t.x, 0), y: num(t.y, 0), width: num(t.width, 40), height: num(t.height, 40), rotation: num(t.rotation, 0), layer: parseInt(t.layer, 10) || 2, visible: t.visible !== false, locked: t.locked === true, snapToGrid: t.snapToGrid !== false, lightRadius: num(t.lightRadius, 0), visionRadius: num(t.visionRadius, 0), displayName: clampStr(t.displayName, 60), showName: t.showName !== false, opacity: Math.min(1, Math.max(0.1, num(t.opacity, 1))), bars: Array.isArray(t.bars) ? t.bars : null, statusMarkers: Array.isArray(t.statusMarkers) ? t.statusMarkers : null, ownerId: t.ownerUsername ? userByName.get(t.ownerUsername) || null : null, characterId: typeof t.characterIndex === 'number' && charIds[t.characterIndex] ? charIds[t.characterIndex] : null },
           });
           tokenCount++;
           for (const p of (t.permissions || [])) {
