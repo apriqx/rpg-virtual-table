@@ -12,6 +12,7 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
   const [locked, setLocked] = useState(false);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [lightRadius, setLightRadius] = useState(0);
+  const [visionRadius, setVisionRadius] = useState(0);
   const [ownerId, setOwnerId] = useState('');
   const [characterId, setCharacterId] = useState('');
   const [characters, setCharacters] = useState([]);
@@ -33,9 +34,9 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
   useEffect(() => {
     if (!open) return;
     if (token) {
-      setName(token.name || ''); setType(token.type || 'character'); setImageUrl(token.imageUrl || ''); setWidth(token.width || 40); setHeight(token.height || 40); setLayer(token.layer || 2); setVisible(token.visible !== false); setLocked(token.locked === true); setSnapToGrid(token.snapToGrid !== false); setLightRadius(token.lightRadius || 0); setOwnerId(token.ownerId || ''); setCharacterId(token.characterId || '');
+      setName(token.name || ''); setType(token.type || 'character'); setImageUrl(token.imageUrl || ''); setWidth(token.width || 40); setHeight(token.height || 40); setLayer(token.layer || 2); setVisible(token.visible !== false); setLocked(token.locked === true); setSnapToGrid(token.snapToGrid !== false); setLightRadius(token.lightRadius || 0); setVisionRadius(token.visionRadius || 0); setOwnerId(token.ownerId || ''); setCharacterId(token.characterId || '');
     } else {
-      setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setOwnerId(''); setCharacterId('');
+      setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setVisionRadius(0); setOwnerId(''); setCharacterId('');
     }
   }, [open, token]);
 
@@ -43,8 +44,8 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
 
   function handleSubmit(e) {
     e.preventDefault();
-    onSubmit({ name, type, imageUrl: imageUrl || null, width, height, layer, visible, locked, snapToGrid, lightRadius: Number(lightRadius) || 0, ownerId: ownerId || null, characterId: characterId || null });
-    if (!token) { setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setOwnerId(''); setCharacterId(''); }
+    onSubmit({ name, type, imageUrl: imageUrl || null, width, height, layer, visible, locked, snapToGrid, lightRadius: Number(lightRadius) || 0, visionRadius: Number(visionRadius) || 0, ownerId: ownerId || null, characterId: characterId || null });
+    if (!token) { setName(''); setType('character'); setImageUrl(''); setWidth(40); setHeight(40); setLayer(2); setVisible(true); setLocked(false); setSnapToGrid(true); setLightRadius(0); setVisionRadius(0); setOwnerId(''); setCharacterId(''); }
   }
 
   return (
@@ -61,6 +62,7 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
           <div className="form-group"><label>Altura (px)</label><input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))} min={10} /></div>
           <div className="form-group"><label>Camada</label><select value={layer} onChange={(e) => setLayer(Number(e.target.value))}><option value={2}>Personagens / Objetos</option><option value={5}>Camada do Mestre</option></select></div>
           <div className="form-group"><label>Raio de luz (px, 0 = sem luz)</label><input type="number" value={lightRadius} onChange={(e) => setLightRadius(Number(e.target.value))} min={0} max={500} /><small style={{ color: '#aaa' }}>Ilumina a neblina ao redor do token (apenas com Masquerade OFF).</small></div>
+          <div className="form-group"><label>Raio de visao (pes, 0 = padrao)</label><input type="number" value={visionRadius} onChange={(e) => setVisionRadius(Number(e.target.value))} min={0} max={500} /><small style={{ color: '#aaa' }}>Area circular onde o token enxerga sem o mestre revelar: pleno perto do token, escurece ate a borda. Convertido com a grade atual (ex.: 9ft/celula). Apenas o mestre define.</small></div>
           <div className="form-group"><label><input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} /> Visivel para jogadores</label></div>
           <div className="form-group"><label><input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} /> Travado (nao pode ser movido)</label></div>
           <div className="form-group"><label><input type="checkbox" checked={snapToGrid} onChange={(e) => setSnapToGrid(e.target.checked)} /> Encaixar na grade ao mover</label></div>

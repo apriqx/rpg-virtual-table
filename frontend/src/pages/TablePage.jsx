@@ -291,10 +291,10 @@ export default function TablePage() {
   async function handleTokenSubmit(fd) {
     try {
       if (editingToken) {
-        const d = await api.tokens.update(tableId, activeMap.id, editingToken.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
+        const d = await api.tokens.update(tableId, activeMap.id, editingToken.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
         setTokens((p) => p.map((t) => (t.id === d.id ? d : t))); setSelectedToken(d);
       } else {
-        const d = await api.tokens.create(tableId, activeMap.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, x: tokenClickPos?.x || 0, y: tokenClickPos?.y || 0, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
+        const d = await api.tokens.create(tableId, activeMap.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, x: tokenClickPos?.x || 0, y: tokenClickPos?.y || 0, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
         setTokens((p) => [...p, d.token]);
       }
       setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null);

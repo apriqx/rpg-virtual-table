@@ -283,6 +283,16 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
               return <Rect key={r.id || i} x={r.x} y={r.y} width={r.width} height={r.height} fill="white" />;
             })}
             {tokens.filter((t) => (t.lightRadius || 0) > 0 && !masquerade).map((t) => (<Circle key={`light-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={t.lightRadius} fill="white" />))}
+            {tokens.filter((t) => (t.visionRadius || 0) > 0 && !masquerade).map((t) => {
+              const pxPerFt = (gridConfig.cellSize || 50) / (gridConfig.physicalSize || 1.5);
+              const r = t.visionRadius * pxPerFt;
+              return (
+                <Circle key={`vision-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={r}
+                  fillRadialGradientStart={{ x: 0, y: 0 }} fillRadialGradientStartRadius={0}
+                  fillRadialGradientEnd={{ x: 0, y: 0 }} fillRadialGradientEndRadius={r}
+                  fillRadialGradientColorStops={[0, 'rgba(255,255,255,1)', 0.55, 'rgba(255,255,255,0.85)', 1, 'rgba(255,255,255,0)']} />
+              );
+            })}
           </Group>
         </Layer>
         {isMaster && (currentTool === 'fogReveal' || currentTool === 'fogHide') && (

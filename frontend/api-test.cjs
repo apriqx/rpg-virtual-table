@@ -117,6 +117,14 @@ async function main() {
   const freeId = r.data.token.id;
   r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${freeId}`, { token: mTok, body: { snapToGrid: true, locked: true } });
   ok('update snapToGrid/locked persiste', r.status === 200 && r.data.snapToGrid === true && r.data.locked === true);
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Visao Sombria', x: 30, y: 30, visionRadius: 60 } });
+  ok('token com visionRadius em pes persiste', r.status === 201 && r.data.token.visionRadius === 60);
+  const visionId = r.data.token.id;
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${visionId}`, { token: mTok, body: { visionRadius: 30 } });
+  ok('update visionRadius persiste', r.status === 200 && r.data.visionRadius === 30);
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'X', x: 0, y: 0, visionRadius: -5 } });
+  ok('visionRadius negativo vira 0', r.status === 201 && r.data.token.visionRadius === 0);
+  await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${visionId}`, { token: mTok });
   r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: pTok });
   const pTokens = Array.isArray(r.data) ? r.data : [];
   ok('jogador NAO recebe token camada 5', !pTokens.some((t) => t.id === hiddenId));

@@ -14,9 +14,9 @@ function filterTokensForPlayer(tokens, userId) {
 async function createToken(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, snapToGrid, ownerId, characterId, lightRadius } = req.body;
+    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, snapToGrid, ownerId, characterId, lightRadius, visionRadius } = req.body;
     const token = await prisma.token.create({
-      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: parseFloat(lightRadius) || 0 },
+      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: Math.max(0, parseFloat(lightRadius) || 0), visionRadius: Math.max(0, parseFloat(visionRadius) || 0) },
       include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } },
     });
     broadcastToTable(tableId, 'token:created', { token, mapId });
@@ -54,7 +54,8 @@ async function updateToken(req, res) {
     if (snapToGrid !== undefined) data.snapToGrid = snapToGrid;
     if (layer !== undefined) data.layer = parseInt(layer, 10);
     if (characterId !== undefined) data.characterId = characterId;
-    if (req.body.lightRadius !== undefined) data.lightRadius = parseFloat(req.body.lightRadius);
+    if (req.body.lightRadius !== undefined) data.lightRadius = Math.max(0, parseFloat(req.body.lightRadius) || 0);
+    if (req.body.visionRadius !== undefined) data.visionRadius = Math.max(0, parseFloat(req.body.visionRadius) || 0);
     const token = await prisma.token.update({ where: { id: tokenId }, data, include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } } });
     broadcastToTable(tableId, 'token:updated', { token, mapId });
     res.json(token);

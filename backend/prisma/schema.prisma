@@ -136,6 +136,7 @@ model Token {
   locked       Boolean    @default(false)
   snapToGrid   Boolean    @default(true)
   lightRadius  Float      @default(0)
+  visionRadius Float      @default(0)
   ownerId      String?
   characterId  String?
   owner        User?      @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: SetNull)
