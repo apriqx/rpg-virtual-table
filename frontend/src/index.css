@@ -1023,3 +1023,27 @@ body {
 .fog-shape-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #ccc; }
 .fog-shape-label select { background: #2a2a3e; color: #eee; border: 1px solid #44475a; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
 .fog-free-hint { color: #f1fa8c; font-size: 11px; }
+
+.modal-wide { max-width: 640px; width: 640px; max-height: 90vh; overflow-y: auto; }
+.tab-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid #2a2a3e; padding-bottom: 8px; }
+.tab-btn { background: transparent; border: 1px solid transparent; color: #aaa; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.tab-btn:hover { color: #fff; background: #1a1a2e; }
+.tab-btn.active { color: #fff; background: #e94560; }
+.bar-slot { border: 1px solid #2a2a3e; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+.marker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.marker-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 6px; padding: 4px 2px; cursor: pointer; color: #ccc; }
+.marker-btn:hover { border-color: #4a9eff; }
+.marker-btn.active { border-color: #e94560; background: #2a1a2e; }
+.marker-emoji { font-size: 16px; }
+.marker-label { font-size: 10px; }
+.token-context-menu { position: absolute; z-index: 41; min-width: 170px; background: #12121f; border: 1px solid #2a2a3e; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); padding: 4px; display: flex; flex-direction: column; }
+.token-context-menu button { background: transparent; border: none; color: #ddd; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.token-context-menu button:hover { background: #1f1f33; color: #fff; }
+.token-context-menu .tcm-danger { color: #ff6b81; }
+.token-context-menu .tcm-title { font-size: 11px; color: #888; padding: 4px 10px 6px; border-bottom: 1px solid #2a2a3e; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.token-context-menu .tcm-group { padding: 4px 10px 6px; }
+.token-context-menu .tcm-group-label { display: block; font-size: 10px; color: #888; margin-bottom: 3px; text-transform: uppercase; }
+.token-context-menu .tcm-group-btns { display: flex; gap: 4px; }
+.token-context-menu .tcm-group-btns button { background: #1a1a2e; border: 1px solid #2a2a3e; font-size: 11px; padding: 3px 7px; }
+.token-context-menu .tcm-group-btns button.active { background: #e94560; border-color: #e94560; color: #fff; }
+.tcm-backdrop { position: fixed; inset: 0; z-index: 40; }

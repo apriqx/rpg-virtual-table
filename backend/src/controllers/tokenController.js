@@ -1,6 +1,24 @@
 const { prisma } = require('../config/database');
 const { broadcastToTable } = require('../socket');
 
+const TOKEN_INCLUDE = { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } };
+
+function sanitizeBars(bars) {
+  if (!Array.isArray(bars)) return null;
+  return bars.slice(0, 3).map((b) => (b && typeof b === 'object' ? {
+    label: String(b.label || '').slice(0, 20),
+    current: Number(b.current) || 0,
+    max: Number(b.max) || 0,
+    visible: b.visible !== false,
+    color: typeof b.color === 'string' ? b.color.slice(0, 9) : '#50fa7b',
+  } : null));
+}
+
+function sanitizeMarkers(markers) {
+  if (!Array.isArray(markers)) return null;
+  return [...new Set(markers.filter((m) => typeof m === 'string' && m.length <= 24).map((m) => m))].slice(0, 20);
+}
+
 function filterTokensForPlayer(tokens, userId) {
   return tokens.filter((token) => {
     if (!token.visible) return false;
@@ -14,10 +32,10 @@ function filterTokensForPlayer(tokens, userId) {
 async function createToken(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, snapToGrid, ownerId, characterId, lightRadius, visionRadius } = req.body;
+    const { name, imageUrl, type, x, y, width, height, rotation, layer, visible, locked, snapToGrid, ownerId, characterId, lightRadius, visionRadius, displayName, showName, opacity, bars, statusMarkers } = req.body;
     const token = await prisma.token.create({
-      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: Math.max(0, parseFloat(lightRadius) || 0), visionRadius: Math.max(0, parseFloat(visionRadius) || 0) },
-      include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } },
+      data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: Math.max(0, parseFloat(lightRadius) || 0), visionRadius: Math.max(0, parseFloat(visionRadius) || 0), displayName: displayName ? String(displayName).slice(0, 60) : null, showName: showName !== undefined ? showName : true, opacity: Math.min(1, Math.max(0.1, opacity === undefined ? 1 : parseFloat(opacity) || 1)), bars: sanitizeBars(bars), statusMarkers: sanitizeMarkers(statusMarkers) },
+      include: TOKEN_INCLUDE,
     });
     broadcastToTable(tableId, 'token:created', { token, mapId });
     res.status(201).json({ token });
@@ -38,7 +56,7 @@ async function getTokens(req, res) {
 async function updateToken(req, res) {
   try {
     const { tokenId, mapId, tableId } = req.params;
-    const { name, imageUrl, type, x, y, width, height, rotation, visible, locked, snapToGrid, layer, characterId, ownerId } = req.body;
+    const { name, imageUrl, type, x, y, width, height, rotation, visible, locked, snapToGrid, layer, characterId, ownerId, displayName, showName, opacity, bars, statusMarkers } = req.body;
     const data = {};
     if (name !== undefined) data.name = name;
     if (ownerId !== undefined) data.ownerId = ownerId || null;
@@ -54,6 +72,11 @@ async function updateToken(req, res) {
     if (snapToGrid !== undefined) data.snapToGrid = snapToGrid;
     if (layer !== undefined) data.layer = parseInt(layer, 10);
     if (characterId !== undefined) data.characterId = characterId;
+    if (displayName !== undefined) data.displayName = displayName ? String(displayName).slice(0, 60) : null;
+    if (showName !== undefined) data.showName = showName;
+    if (opacity !== undefined) data.opacity = Math.min(1, Math.max(0.1, parseFloat(opacity) || 1));
+    if (bars !== undefined) data.bars = sanitizeBars(bars);
+    if (statusMarkers !== undefined) data.statusMarkers = sanitizeMarkers(statusMarkers);
     if (req.body.lightRadius !== undefined) data.lightRadius = Math.max(0, parseFloat(req.body.lightRadius) || 0);
     if (req.body.visionRadius !== undefined) data.visionRadius = Math.max(0, parseFloat(req.body.visionRadius) || 0);
     const token = await prisma.token.update({ where: { id: tokenId }, data, include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } } });
@@ -97,4 +120,35 @@ async function getTokenPermissions(req, res) {
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar permissoes' }); }
 }
 
-module.exports = { createToken, getTokens, updateToken, deleteToken, setTokenPermissions, getTokenPermissions };
+async function duplicateToken(req, res) {
+  try {
+    const { tokenId, mapId, tableId } = req.params;
+    const original = await prisma.token.findUnique({ where: { id: tokenId }, include: { permissions: true } });
+    if (!original) return res.status(404).json({ error: 'Token nao encontrado' });
+    const { name, x, y } = req.body || {};
+    const token = await prisma.token.create({
+      data: {
+        mapId,
+        name: (name && String(name).trim()) || original.name + ' (copia)',
+        imageUrl: original.imageUrl, type: original.type,
+        x: x !== undefined ? parseFloat(x) || 0 : original.x + 20, y: y !== undefined ? parseFloat(y) || 0 : original.y + 20,
+        width: original.width, height: original.height, rotation: original.rotation, layer: original.layer,
+        visible: original.visible, locked: false, snapToGrid: original.snapToGrid,
+        lightRadius: original.lightRadius, visionRadius: original.visionRadius,
+        displayName: original.displayName, showName: original.showName, opacity: original.opacity,
+        bars: original.bars === null || original.bars === undefined ? null : JSON.parse(JSON.stringify(original.bars)),
+        statusMarkers: original.statusMarkers === null || original.statusMarkers === undefined ? null : JSON.parse(JSON.stringify(original.statusMarkers)),
+        ownerId: original.ownerId, characterId: original.characterId,
+      },
+      include: TOKEN_INCLUDE,
+    });
+    if (original.permissions.length > 0) {
+      await prisma.tokenPermission.createMany({ data: original.permissions.map((p) => ({ tokenId: token.id, userId: p.userId, canView: p.canView, canMove: p.canMove, canResize: p.canResize, canDelete: p.canDelete })) });
+    }
+    const full = await prisma.token.findUnique({ where: { id: token.id }, include: TOKEN_INCLUDE });
+    broadcastToTable(tableId, 'token:created', { token: full, mapId });
+    res.status(201).json({ token: full });
+  } catch (error) { res.status(500).json({ error: 'Erro ao duplicar token' }); }
+}
+
+module.exports = { createToken, getTokens, updateToken, deleteToken, duplicateToken, setTokenPermissions, getTokenPermissions };

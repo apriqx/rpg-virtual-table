@@ -135,6 +135,11 @@ model Token {
   visible      Boolean    @default(true)
   locked       Boolean    @default(false)
   snapToGrid   Boolean    @default(true)
+  displayName  String?
+  showName     Boolean    @default(true)
+  opacity      Float      @default(1)
+  bars         Json?
+  statusMarkers Json?
   lightRadius  Float      @default(0)
   visionRadius Float      @default(0)
   ownerId      String?

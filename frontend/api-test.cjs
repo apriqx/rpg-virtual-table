@@ -125,6 +125,21 @@ async function main() {
   r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'X', x: 0, y: 0, visionRadius: -5 } });
   ok('visionRadius negativo vira 0', r.status === 201 && r.data.token.visionRadius === 0);
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${visionId}`, { token: mTok });
+  // ---- tokens avançados: displayName/bars/markers/opacity + duplicar ----
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Goblin Secreto', displayName: 'Figura Misteriosa', showName: false, opacity: 0.5, x: 10, y: 10, bars: [{ label: 'PV', current: 7, max: 12, visible: true, color: '#50fa7b' }], statusMarkers: ['poisoned', 'marked'] } });
+  ok('token com displayName/bars/markers/opacity persiste', r.status === 201 && r.data.token.displayName === 'Figura Misteriosa' && r.data.token.showName === false && r.data.token.opacity === 0.5 && Array.isArray(r.data.token.bars) && r.data.token.bars.length === 1 && r.data.token.bars[0].label === 'PV' && Array.isArray(r.data.token.statusMarkers) && r.data.token.statusMarkers.join(',') === 'poisoned,marked');
+  const richId = r.data.token.id;
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${richId}`, { token: mTok, body: { bars: [{ label: 'PV', current: 3, max: 12, visible: true, color: '#ff5555' }, { label: 'Escudo', current: 2, max: 5, visible: true, color: '#8be9fd' }], statusMarkers: ['dead'], opacity: 0.9 } });
+  ok('update bars/markers/opacity persiste', r.status === 200 && r.data.bars.length === 2 && r.data.bars[1].label === 'Escudo' && r.data.statusMarkers.join(',') === 'dead' && r.data.opacity === 0.9);
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens/${richId}/duplicate`, { token: mTok, body: {} });
+  ok('duplicar token -> 201 com (copia) e mesmos dados', r.status === 201 && r.data.token.id !== richId && r.data.token.name.indexOf('(copia)') !== -1 && r.data.token.opacity === 0.9 && r.data.token.displayName === 'Figura Misteriosa' && Array.isArray(r.data.token.statusMarkers) && r.data.token.statusMarkers.join(',') === 'dead');
+  const richDupId = r.data.token ? r.data.token.id : null;
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens/${richId}/duplicate`, { token: pTok, body: {} });
+  ok('player nao duplica token -> 403', r.status === 403);
+  r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok });
+  ok('duplicata aparece na lista do mestre', r.status === 200 && Array.isArray(r.data) && r.data.some((t) => t.id === richDupId));
+  if (richDupId) await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${richDupId}`, { token: mTok });
+  await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${richId}`, { token: mTok });
   r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: pTok });
   const pTokens = Array.isArray(r.data) ? r.data : [];
   ok('jogador NAO recebe token camada 5', !pTokens.some((t) => t.id === hiddenId));

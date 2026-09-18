@@ -283,18 +283,20 @@ export default function TablePage() {
 
   function handleAddToken(x, y) { setTokenClickPos({ x, y }); setEditingToken(null); setShowTokenModal(true); }
 
-  function handleEditToken() {
-    if (!selectedToken) { alert('Selecione um token primeiro (ferramenta Selecionar)'); return; }
-    setTokenClickPos(null); setEditingToken(selectedToken); setShowTokenModal(true);
+  function handleEditToken(t) {
+    const tok = t || selectedToken;
+    if (!tok) { alert('Selecione um token primeiro (ferramenta Selecionar)'); return; }
+    setTokenClickPos(null); setEditingToken(tok); setShowTokenModal(true);
   }
 
   async function handleTokenSubmit(fd) {
+    const extra = { displayName: fd.displayName || null, showName: fd.showName !== false, opacity: Number(fd.opacity) || 1, rotation: Number(fd.rotation) || 0, bars: Array.isArray(fd.bars) ? fd.bars : [], statusMarkers: Array.isArray(fd.statusMarkers) ? fd.statusMarkers : [] };
     try {
       if (editingToken) {
-        const d = await api.tokens.update(tableId, activeMap.id, editingToken.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
+        const d = await api.tokens.update(tableId, activeMap.id, editingToken.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null, ...extra });
         setTokens((p) => p.map((t) => (t.id === d.id ? d : t))); setSelectedToken(d);
       } else {
-        const d = await api.tokens.create(tableId, activeMap.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, x: tokenClickPos?.x || 0, y: tokenClickPos?.y || 0, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null });
+        const d = await api.tokens.create(tableId, activeMap.id, { name: fd.name, type: fd.type, imageUrl: fd.imageUrl || null, x: tokenClickPos?.x || 0, y: tokenClickPos?.y || 0, width: Number(fd.width), height: Number(fd.height), layer: Number(fd.layer), visible: fd.visible, locked: fd.locked, snapToGrid: fd.snapToGrid, lightRadius: Number(fd.lightRadius) || 0, visionRadius: Number(fd.visionRadius) || 0, ownerId: fd.ownerId || null, characterId: fd.characterId || null, ...extra });
         setTokens((p) => [...p, d.token]);
       }
       setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null);
@@ -307,7 +309,6 @@ export default function TablePage() {
   function handleTokenSelect(tokenId) {
     const t = tokens.find((t) => t.id === tokenId); if (!t) return; setSelectedToken(t);
     if (t.character) setSelectedCharacter(t.character);
-    if (isMaster && currentTool === 'select') setShowPermModal(true);
   }
 
   async function handleSavePermissions(p) { try { await api.tokens.setPermissions(tableId, activeMap.id, selectedToken.id, p); await loadMapData(activeMap.id); setShowPermModal(false); setSelectedToken(null); } catch { alert('Erro ao salvar permissoes'); } }
@@ -317,6 +318,51 @@ export default function TablePage() {
     if (!window.confirm('Excluir o token "' + selectedToken.name + '"?')) return;
     try { await api.tokens.remove(tableId, activeMap.id, selectedToken.id); setTokens((p) => p.filter((t) => t.id !== selectedToken.id)); setSelectedToken(null); setShowPermModal(false); } catch { alert('Erro ao excluir token'); }
   }
+
+  function canControlToken(token) {
+    if (isMaster) return true;
+    if (token.ownerId === user.id) return true;
+    const p = (token.permissions || []).find((x) => x.userId === user.id);
+    return Boolean(p && (p.canMove || p.canResize || p.canDelete));
+  }
+
+  async function handleTokenDuplicate(token) {
+    try {
+      const d = await api.tokens.duplicate(tableId, activeMap.id, token.id, {});
+      setTokens((p) => [...p, d.token]); setSelectedToken(d.token);
+    } catch { alert('Erro ao duplicar token'); }
+  }
+
+  async function handleTokenPatch(token, patch) {
+    setTokens((p) => p.map((t) => (t.id === token.id ? { ...t, ...patch } : t)));
+    if (selectedToken && selectedToken.id === token.id) setSelectedToken((s) => (s ? { ...s, ...patch } : s));
+    try { const d = await api.tokens.update(tableId, activeMap.id, token.id, patch); setTokens((p) => p.map((t) => (t.id === d.id ? d : t))); } catch { loadMapData(activeMap.id); }
+  }
+
+  async function handleTokenDeleteFromMenu(token) {
+    try {
+      await api.tokens.remove(tableId, activeMap.id, token.id);
+      setTokens((p) => p.filter((t) => t.id !== token.id));
+      if (selectedToken && selectedToken.id === token.id) { setSelectedToken(null); setShowPermModal(false); }
+    } catch { alert('Erro ao excluir token'); }
+  }
+
+  function openTokenPermissions(token) { setSelectedToken(token); setShowPermModal(true); }
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (!selectedToken || !activeMap || showTokenModal || showPermModal) return;
+      if (e.key === 'Delete') {
+        if (isMaster || canControlToken(selectedToken)) { e.preventDefault(); handleDeleteToken(); }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        if (isMaster) { e.preventDefault(); handleTokenDuplicate(selectedToken); }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   async function handleAddMember(e) {
     e.preventDefault();
@@ -470,7 +516,7 @@ export default function TablePage() {
         </div>
         {activeMap ? (
           <Suspense fallback={<div className="loading">Carregando mapa...</div>}>
-            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} />
+            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} onTokenEdit={handleEditToken} onTokenDuplicate={handleTokenDuplicate} onTokenPatch={handleTokenPatch} onTokenDelete={handleTokenDeleteFromMenu} onTokenPermissions={openTokenPermissions} canControlToken={canControlToken} />
           </Suspense>
         ) : <div className="empty-state">{isMaster ? 'Envie um mapa para comecar' : 'Nenhum mapa disponivel'}</div>}
       </div>
@@ -483,7 +529,7 @@ export default function TablePage() {
       {showUploadModal && (<div className="modal-overlay" onClick={() => { setShowUploadModal(false); setMapFile(null); }}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>×</button><h2>Adicionar Mapa</h2><form onSubmit={handleUploadMap}><div className="form-group"><label>Nome</label><input value={uploadForm.name} onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })} required /></div><div className="form-group"><label>Arquivo do mapa</label><input type="file" accept="image/*,video/*" onChange={(e) => setMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Imagens (JPG, PNG, WebP) ou videos (MP4, WebM) - ate 50MB</small></div><div className="form-group"><label>URL do mapa (se nao enviar arquivo)</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={uploadForm.imageUrl} onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} /></div><div className="form-group"><label>Largura (px)</label><input type="number" value={uploadForm.width} onChange={(e) => setUploadForm({ ...uploadForm, width: Number(e.target.value) })} min={100} /></div><div className="form-group"><label>Altura (px)</label><input type="number" value={uploadForm.height} onChange={(e) => setUploadForm({ ...uploadForm, height: Number(e.target.value) })} min={100} /></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
       {assignMapModal && (<div className="modal-overlay" onClick={() => setAssignMapModal(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setAssignMapModal(null)}>×</button><h2>Jogadores em "{assignMapModal.name}"</h2><p style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Cada jogador ve apenas o mapa em que foi colocado. Sem atribuicao, ele segue o mapa ativo da mesa.</p>{members.filter((mm) => mm.role !== 'MASTER').map((mm) => { const mu = mm.user || mm; const uid = mm.userId || mu.id; return (<label key={uid} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}><input type="checkbox" checked={assignSel.has(uid)} onChange={() => toggleAssign(uid)} /><span>{mu.username}</span></label>); })}{members.filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa ainda.</p>}<div className="modal-actions"><button type="button" className="btn btn-sm" onClick={assignAll}>Todos</button><button type="button" className="btn btn-sm" onClick={assignNone}>Ninguem</button><button type="button" className="btn btn-secondary" onClick={() => setAssignMapModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? 'Salvando...' : 'Salvar'}</button></div></div></div>)}
       {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video por arquivo (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual. Se escolher um arquivo, ele tem prioridade sobre a URL.</small></div><div className="form-group"><label>URL da imagem</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={editMapForm.imageUrl || ''} onChange={(e) => setEditMapForm({ ...editMapForm, imageUrl: e.target.value })} /><small style={{ color: '#aaa' }}>{editMapFile ? 'Um arquivo foi escolhido: ele substituira a imagem ao salvar.' : 'Eh a imagem atual deste mapa. Altere para trocar por outra URL; mantenha para preservar.'}</small>{!editMapFile && editMapForm.imageUrl && <img src={resolveUrl(editMapForm.imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} onError={(ev) => { ev.target.style.display = 'none'; }} />}</div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
-      {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} />}
+      {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} cellSize={gridConfig.cellSize} onOpenPermissions={openTokenPermissions} />}
       {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} onSave={handleSaveGrid} />}
       {showPermModal && selectedToken && <PermissionDialog open={showPermModal} onClose={() => { setShowPermModal(false); setSelectedToken(null); }} token={selectedToken} members={members} tableId={tableId} mapId={activeMap.id} onSave={handleSavePermissions} />}
       {showAddMemberModal && (<div className="modal-overlay" onClick={() => setShowAddMemberModal(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowAddMemberModal(false)}>×</button><h2>Adicionar Membro</h2><form onSubmit={handleAddMember}><div className="form-group"><label>Usuario (nome ou e-mail)</label><input value={addMemberForm.username} onChange={(e) => setAddMemberForm({ ...addMemberForm, username: e.target.value })} placeholder="ex: alice ou alice@email.com" required /></div><div className="form-group"><label>Cargo</label><select value={addMemberForm.role} onChange={(e) => setAddMemberForm({ ...addMemberForm, role: e.target.value })}><option value="PLAYER">Jogador</option><option value="MASTER">Mestre</option></select></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
