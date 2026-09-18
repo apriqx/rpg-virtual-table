@@ -2,12 +2,19 @@ import { useState, useEffect } from 'react';
 import api, { resolveUrl } from '../services/api';
 import Dnd5eSheetBody from './Dnd5eSheetBody';
 
-export default function CharacterSheet({ character, tableId, onClose, isOwner, isMaster }) {
+export default function CharacterSheet({ character, tableId, onClose, isOwner, isMaster, userId, members }) {
   const [data, setData] = useState(character.data || {});
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(character.data || {});
   const [saving, setSaving] = useState(false);
   const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const [showPerms, setShowPerms] = useState(false);
+  const [permSel, setPermSel] = useState(() => new Set());
+  const [permCtrl, setPermCtrl] = useState(() => new Set());
+  const [permSaving, setPermSaving] = useState(false);
+
+  const myPerm = (character.permissions || []).find((p) => p.userId === userId);
+  const canControl = isOwner || isMaster || Boolean(myPerm?.canControl);
 
   const hp = data.hp || { current: 0, max: 0, temp: 0 };
   const stats = data.stats || { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
@@ -77,6 +84,29 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
     alert('Descanso longo concluido! PV ' + hp.current + '/' + (hp.max || 0) + ', dados de vida e espacos de magia restaurados.');
   }
 
+  function openPerms() {
+    const sel = new Set();
+    const ctrl = new Set();
+    (character.permissions || []).forEach((p) => { if (p.canView || p.canControl) sel.add(p.userId); if (p.canControl) ctrl.add(p.userId); });
+    setPermSel(sel); setPermCtrl(ctrl);
+    setShowPerms(true);
+  }
+
+  async function savePerms() {
+    setPermSaving(true);
+    try {
+      const list = (members || []).filter((mm) => mm.role !== 'MASTER').map((mm) => {
+        const uid = mm.userId || (mm.user || mm).id;
+        const ctl = permCtrl.has(uid);
+        return { userId: uid, canView: permSel.has(uid) || ctl, canControl: ctl };
+      });
+      const updated = await api.characters.setPermissions(tableId, character.id, list);
+      character.permissions = updated.permissions;
+      setShowPerms(false);
+    } catch { alert('Erro ao salvar permissoes'); }
+    setPermSaving(false);
+  }
+
   async function handlePortraitChange(e) {
     const file = e.target.files && e.target.files[0]; e.target.value = ''; if (!file) return;
     setUploadingPortrait(true);
@@ -114,7 +144,10 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
               : <span className="char-portrait-empty">?</span>}
           </div>
           <h2 style={{ flex: 1 }}>{character.name}</h2>
-          {(isOwner || isMaster) && !editing && (
+          {isMaster && (
+            <button className="btn btn-sm btn-secondary" title="Quem pode ver/controlar esta ficha" onClick={openPerms}>👥 Permissoes</button>
+          )}
+          {canControl && !editing && (
             <button className="btn btn-sm btn-primary" onClick={startEdit}>Editar</button>
           )}
           {editing && (
@@ -132,7 +165,7 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
         )}
 
         {character.system === 'dnd5e' ? (
-          <Dnd5eSheetBody editData={editData} setField={setField} editing={editing} tableId={tableId} onQuickHp={(isOwner || isMaster) ? quickHp : undefined} onShortRest={(isOwner || isMaster) ? shortRest : undefined} onLongRest={(isOwner || isMaster) ? longRest : undefined} />
+          <Dnd5eSheetBody editData={editData} setField={setField} editing={editing} tableId={tableId} onQuickHp={canControl ? quickHp : undefined} onShortRest={canControl ? shortRest : undefined} onLongRest={canControl ? longRest : undefined} />
         ) : (
         <>
         <div className="char-hp-section">
@@ -181,6 +214,35 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
           )}
         </div>
         </>
+        )}
+        {showPerms && (
+          <div className="modal-overlay" onClick={() => setShowPerms(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
+              <button className="modal-close" onClick={() => setShowPerms(false)}>×</button>
+              <h2>Permissoes da ficha</h2>
+              <p style={{ color: '#aaa', fontSize: 12 }}>Marque quem pode ver a ficha. Quem tem "controlar" tambem edita valores (HP, descansos) e rola.</p>
+              {(members || []).filter((mm) => mm.role !== 'MASTER').map((mm) => {
+                const mu = mm.user || mm;
+                const uid = mm.userId || mu.id;
+                return (
+                  <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
+                    <span style={{ flex: 1 }}>{mu.username}</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                      <input type="checkbox" checked={permCtrl.has(uid)} onChange={() => setPermCtrl((p) => { const n = new Set(p); if (n.has(uid)) { n.delete(uid); } else { n.add(uid); } return n; })} /> controlar
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                      <input type="checkbox" checked={permSel.has(uid) || permCtrl.has(uid)} onChange={() => setPermSel((p) => { const n = new Set(p); if (n.has(uid)) { n.delete(uid); } else { n.add(uid); } return n; })} /> ver
+                    </label>
+                  </div>
+                );
+              })}
+              {(members || []).filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa.</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowPerms(false)}>Cancelar</button>
+                <button type="button" className="btn btn-primary" onClick={savePerms} disabled={permSaving}>{permSaving ? 'Salvando...' : 'Salvar'}</button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

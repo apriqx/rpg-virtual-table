@@ -41,6 +41,8 @@ const characters = {
   create: async (tableId, data) => { const r = await api.post(`/tables/${tableId}/characters`, data); return r.data; },
   update: async (tableId, characterId, data) => { const r = await api.put(`/tables/${tableId}/characters/${characterId}`, data); return r.data; },
   remove: async (tableId, characterId) => { const r = await api.delete(`/tables/${tableId}/characters/${characterId}`); return r.data; },
+  setPermissions: async (tableId, characterId, permissions) => { const r = await api.put(`/tables/${tableId}/characters/${characterId}/permissions`, { permissions }); return r.data; },
+  getPermissions: async (tableId, characterId) => { const r = await api.get(`/tables/${tableId}/characters/${characterId}/permissions`); return r.data; },
 };
 
 const drawings = {

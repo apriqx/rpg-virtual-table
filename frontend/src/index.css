@@ -1004,3 +1004,8 @@ body {
 .map-act { background: none; border: none; cursor: pointer; font-size: 13px; padding: 2px 3px; border-radius: 4px; line-height: 1; }
 .map-act:hover { background: rgba(233, 69, 96, 0.25); }
 .map-delete:hover { background: rgba(255, 85, 85, 0.35); }
+
+/* --- Secoes de fichas --- */
+.char-section { margin-bottom: 14px; }
+.char-section-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #44475a; padding-bottom: 4px; margin-bottom: 6px; }
+.char-section-header h3 { margin: 0; font-size: 13px; color: #8be9fd; text-transform: uppercase; letter-spacing: 0.5px; }

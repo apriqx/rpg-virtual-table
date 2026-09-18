@@ -21,6 +21,7 @@ model User {
   tokenPermissions TokenPermission[]
   chatMessages    ChatMessage[]
   characters      Character[]
+  characterPermissions CharacterPermission[]
 }
 
 model Table {
@@ -75,10 +76,26 @@ model Character {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   system    String    @default("custom")
+  kind      String    @default("pc")
   data      Json      @default("{\"hp\":{\"current\":0,\"max\":0,\"temp\":0}}")
   tokens    Token[]
+  permissions CharacterPermission[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([tableId])
+}
+
+model CharacterPermission {
+  id          String    @id @default(uuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canView     Boolean   @default(true)
+  canControl  Boolean   @default(false)
+
+  @@unique([characterId, userId])
 }
 
 model Map {

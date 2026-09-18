@@ -125,6 +125,47 @@ async function main() {
   r = await req('DELETE', `/tables/${tid}/characters/${charId}`, { token: pTok });
   ok('jogador nao exclui ficha alheia -> 403', r.status === 403);
 
+  // ---- fichas: kinds (pc/npc/monster) + permissoes ----
+  r = await req('POST', `/tables/${tid}/characters`, { token: pTok, body: { name: 'NPC Roubado', kind: 'npc' } });
+  ok('player nao cria NPC -> 403', r.status === 403);
+  r = await req('POST', `/tables/${tid}/characters`, { token: pTok, body: { name: 'Monstro Roubado', kind: 'monster' } });
+  ok('player nao cria Monstro -> 403', r.status === 403);
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'Goblin Batedor', kind: 'monster', system: 'dnd5e' } });
+  ok('mestre cria monstro -> 201 kind monster', r.status === 201 && r.data.kind === 'monster');
+  const monId = r.data.id;
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'Taverneiro', kind: 'npc', system: 'dnd5e' } });
+  ok('mestre cria NPC -> 201 kind npc', r.status === 201 && r.data.kind === 'npc');
+  const npcId = r.data.id;
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'X', kind: 'dragao' } });
+  ok('kind invalido -> 400', r.status === 400);
+  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
+  ok('monstro invisivel para player sem permissao', !r.data.some((c) => c.id === monId));
+  ok('ficha propria do player visivel', r.data.some((c) => c.id === pCharId));
+  r = await req('PUT', `/tables/${tid}/characters/${npcId}`, { token: pTok, body: { name: 'HACK NPC' } });
+  ok('player sem permissao nao edita NPC -> 403', r.status === 403);
+  r = await req('GET', `/tables/${tid}/characters/${npcId}`, { token: pTok });
+  ok('player sem permissao nao abre NPC -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: pTok, body: { permissions: [] } });
+  ok('player nao define permissoes -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canControl: false }] } });
+  ok('mestre define permissoes -> 200', r.status === 200 && Array.isArray(r.data.permissions) && r.data.permissions.some((p) => p.userId === pUser.id && p.canView && !p.canControl));
+  r = await req('GET', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok });
+  ok('GET permissoes lista grants', r.status === 200 && r.data.some((p) => p.userId === pUser.id && p.canView));
+  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
+  ok('monstro visivel apos canView', r.data.some((c) => c.id === monId && Array.isArray(c.permissions) && c.permissions.some((p) => p.userId === pUser.id && p.canView)));
+  r = await req('GET', `/tables/${tid}/characters/${monId}`, { token: pTok });
+  ok('player abre monstro compartilhado -> 200', r.status === 200 && r.data.name === 'Goblin Batedor');
+  r = await req('PUT', `/tables/${tid}/characters/${monId}`, { token: pTok, body: { name: 'TENTATIVA' } });
+  ok('canView sem canControl nao edita -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canControl: true }] } });
+  ok('mestre concede canControl', r.status === 200);
+  r = await req('PUT', `/tables/${tid}/characters/${monId}`, { token: pTok, body: { data: { hp: { current: 3, max: 7, temp: 0 } } } });
+  ok('canControl permite player editar HP', r.status === 200 && r.data.data.hp.current === 3);
+  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [] } });
+  ok('revogar permissoes -> 200 vazio', r.status === 200 && r.data.permissions.length === 0);
+  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
+  ok('monstro invisivel novamente apos revogar', !r.data.some((c) => c.id === monId));
+
   // ---- chat ----
   r = await req('POST', `/tables/${tid}/chat`, { token: pTok, body: { type: 'player', text: 'ola mesa' } });
   ok('player envia mensagem -> 201', r.status === 201);
@@ -161,6 +202,8 @@ async function main() {
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${hiddenId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${visibleId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/characters/${pCharId}`, { token: pTok });
+  await req('DELETE', `/tables/${tid}/characters/${npcId}`, { token: mTok });
+  await req('DELETE', `/tables/${tid}/characters/${monId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}`, { token: mTok });
   console.log('limpeza: mesa de teste removida');
 
