@@ -73,6 +73,9 @@ export default function TablePage() {
   const [editingMap, setEditingMap] = useState(null);
   const [editMapForm, setEditMapForm] = useState({ name: '', width: 1920, height: 1080 });
   const [editMapFile, setEditMapFile] = useState(null);
+  const [assignMapModal, setAssignMapModal] = useState(null);
+  const [assignSel, setAssignSel] = useState(() => new Set());
+  const [assignSaving, setAssignSaving] = useState(false);
   const [tokenClickPos, setTokenClickPos] = useState(null);
 
   const [uploadForm, setUploadForm] = useState({ name: '', width: 1920, height: 1080, imageUrl: '' });
@@ -85,16 +88,24 @@ export default function TablePage() {
   );
   const masquerade = table?.masquerade || false;
   const isMuted = members.find((m) => (m.userId === user.id || m.user?.id === user.id))?.muted || false;
+  const myMember = members.find((m) => (m.userId === user.id || m.user?.id === user.id));
+  const myMapId = myMember?.activeMapId || null;
+  const isMasterRef = useRef(isMaster);
+  isMasterRef.current = isMaster;
+  const myMapIdRef = useRef(null);
+  myMapIdRef.current = myMapId;
 
   const loadTable = useCallback(async () => {
     try {
       const data = await api.tables.getOne(tableId);
       setTable(data.table); setMembers(data.members || []); setMaps(data.maps || []);
-      const active = (data.maps || []).find((m) => m.active) || (data.maps || [])[0];
+      const me = (data.members || []).find((m) => (m.userId === user.id || m.user?.id === user.id));
+      const preferred = me && me.activeMapId ? (data.maps || []).find((m) => m.id === me.activeMapId) : null;
+      const active = preferred || (data.maps || []).find((m) => m.active) || (data.maps || [])[0];
       if (active) { setActiveMap(active); await loadMapData(active.id); }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [tableId]);
+  }, [tableId, user.id]);
 
   const loadMapData = useCallback(async (mapId) => {
     try {
@@ -129,7 +140,13 @@ export default function TablePage() {
     c.push(onSocket('map:created', ({ map }) => setMaps((p) => p.some((m) => m.id === map.id) ? p : [...p, map])));
     c.push(onSocket('map:updated', ({ map }) => { setMaps((p) => p.map((m) => m.id === map.id ? { ...m, ...map } : m)); if (activeMap?.id === map.id) setActiveMap((p) => p ? { ...p, ...map } : p); }));
     c.push(onSocket('map:deleted', ({ mapId: did }) => { setMaps((p) => p.filter((m) => m.id !== did)); if (activeMap?.id === did) { const n = maps.find((m) => m.id !== did); setActiveMap(n || null); if (!n) { setTokens([]); setFogRegions([]); setDrawings([]); setAnnotations([]); } } }));
-    c.push(onSocket('map:switched', async ({ mapId }) => { setMaps((p) => p.map((m) => ({ ...m, active: m.id === mapId }))); const mo = maps.find((m) => m.id === mapId); if (mo) setActiveMap({ ...mo, active: true }); setSelectedToken(null); await loadMapData(mapId); }));
+    c.push(onSocket('map:switched', async ({ mapId }) => { if (!isMasterRef.current && myMapIdRef.current) return; setMaps((p) => p.map((m) => ({ ...m, active: m.id === mapId }))); const mo = maps.find((m) => m.id === mapId); if (mo) setActiveMap({ ...mo, active: true }); setSelectedToken(null); await loadMapData(mapId); }));
+    c.push(onSocket('member:map', async ({ userId: uid, mapId }) => {
+      setMembers((p) => p.map((m) => ((m.userId === uid || m.user?.id === uid) ? { ...m, activeMapId: mapId } : m)));
+      if (uid !== user.id) return;
+      const mo = mapId ? maps.find((m) => m.id === mapId) : maps.find((m) => m.active);
+      if (mo && activeMap?.id !== mo.id) { setSelectedToken(null); setActiveMap({ ...mo, active: true }); await loadMapData(mo.id); }
+    }));
     c.push(onSocket('members:updated', async () => { try { const d = await api.tables.getOne(tableId); setMembers(d.members || []); } catch {} }));
     c.push(onSocket('user:joined', ({ userId, username }) => setOnlineUsers((p) => p.some((u) => u.userId === userId) ? p : [...p, { userId, username }])));
     c.push(onSocket('user:left', ({ userId }) => setOnlineUsers((p) => p.filter((u) => u.userId !== userId))));
@@ -161,7 +178,8 @@ export default function TablePage() {
   }, [tableId, activeMap?.id, maps, loadMapData, selectedCharacter?.id, tokens]);
 
   async function handleSwitchMap(mapId) {
-    if (isMaster && activeMap) await api.maps.update(tableId, activeMap.id, { active: false });
+    if (!isMasterRef.current && myMapIdRef.current && mapId !== myMapIdRef.current) return;
+    if (isMasterRef.current && activeMap) await api.maps.update(tableId, activeMap.id, { active: false });
     await api.maps.update(tableId, mapId, { active: true });
     const u = maps.map((m) => ({ ...m, active: m.id === mapId })); setMaps(u); setActiveMap(u.find((m) => m.id === mapId)); setSelectedToken(null); await loadMapData(mapId);
   }
@@ -197,6 +215,36 @@ export default function TablePage() {
       const d = await api.maps.duplicate(tableId, mapId);
       setMaps((p) => (p.some((m) => m.id === d.map.id) ? p : [...p, d.map]));
     } catch { alert('Erro ao duplicar mapa'); }
+  }
+
+  function openAssignMap(m) {
+    const sel = new Set(members.filter((mm) => mm.role !== 'MASTER' && mm.activeMapId === m.id).map((mm) => mm.userId || mm.user?.id));
+    setAssignSel(sel);
+    setAssignMapModal(m);
+  }
+
+  function toggleAssign(uid) {
+    setAssignSel((p) => { const n = new Set(p); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
+  }
+
+  function assignAll() {
+    setAssignSel(new Set(members.filter((mm) => mm.role !== 'MASTER').map((mm) => mm.userId || mm.user?.id)));
+  }
+
+  function assignNone() { setAssignSel(new Set()); }
+
+  async function saveAssign() {
+    if (!assignMapModal) return;
+    setAssignSaving(true);
+    try {
+      for (const mm of members.filter((x) => x.role !== 'MASTER')) {
+        const uid = mm.userId || mm.user?.id;
+        const want = assignSel.has(uid) ? assignMapModal.id : null;
+        if ((mm.activeMapId || null) !== want) await api.tables.setMemberMap(tableId, uid, want);
+      }
+      setAssignMapModal(null);
+    } catch { alert('Erro ao salvar atribuicao de mapas'); }
+    setAssignSaving(false);
   }
 
   async function handleUpdateMap(e) {
@@ -365,7 +413,10 @@ export default function TablePage() {
           {onlineUsers.length > 0 && <div style={{ fontSize: '11px', color: '#8be9fd', marginTop: '4px' }}>Online: {onlineUsers.map((u) => u.username).join(', ')}</div>}
         </div>
         <h3>Mapas</h3>
-        {maps.map((m) => (<div key={m.id} className={'map-item ' + (activeMap?.id === m.id ? 'active-map' : '')} onClick={() => handleSwitchMap(m.id)}><span className="map-name">{m.name}</span>{isMaster && <span className="map-actions" onClick={(e) => e.stopPropagation()}><button className="map-act" title="Editar" onClick={() => openEditMap(m)}>✏️</button><button className="map-act" title="Duplicar" onClick={() => handleDuplicateMap(m.id)}>📑</button><button className="map-act map-delete" title="Excluir" onClick={() => handleDeleteMap(m.id)}>🗑️</button></span>}</div>))}
+        {(isMaster ? maps : (myMapId ? maps.filter((m) => m.id === myMapId) : maps.filter((m) => m.active))).map((m) => {
+          const assignedNames = members.filter((mm) => mm.role !== 'MASTER' && mm.activeMapId === m.id).map((mm) => (mm.user || mm).username);
+          return (<div key={m.id} className={'map-item ' + (activeMap?.id === m.id ? 'active-map' : '')} onClick={() => handleSwitchMap(m.id)}><span className="map-name">{m.name}</span>{isMaster && <span className="map-actions" onClick={(e) => e.stopPropagation()}><button className="map-act" title={'Jogadores neste mapa' + (assignedNames.length ? ': ' + assignedNames.join(', ') : ' (nenhum)')} onClick={() => openAssignMap(m)}>👥</button><button className="map-act" title="Editar" onClick={() => openEditMap(m)}>✏️</button><button className="map-act" title="Duplicar" onClick={() => handleDuplicateMap(m.id)}>📑</button><button className="map-act map-delete" title="Excluir" onClick={() => handleDeleteMap(m.id)}>🗑️</button></span>}</div>);
+        })}
         {isMaster && <div className="sidebar-actions"><button className="btn btn-sm btn-primary" onClick={() => setShowUploadModal(true)}>+ Mapa</button></div>}
         <h3>Membros</h3>
         {members.map((m) => {
@@ -426,6 +477,7 @@ export default function TablePage() {
       </div>
 
       {showUploadModal && (<div className="modal-overlay" onClick={() => { setShowUploadModal(false); setMapFile(null); }}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>×</button><h2>Adicionar Mapa</h2><form onSubmit={handleUploadMap}><div className="form-group"><label>Nome</label><input value={uploadForm.name} onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })} required /></div><div className="form-group"><label>Arquivo do mapa</label><input type="file" accept="image/*,video/*" onChange={(e) => setMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Imagens (JPG, PNG, WebP) ou videos (MP4, WebM) - ate 50MB</small></div><div className="form-group"><label>URL do mapa (se nao enviar arquivo)</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={uploadForm.imageUrl} onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })} /></div><div className="form-group"><label>Largura (px)</label><input type="number" value={uploadForm.width} onChange={(e) => setUploadForm({ ...uploadForm, width: Number(e.target.value) })} min={100} /></div><div className="form-group"><label>Altura (px)</label><input type="number" value={uploadForm.height} onChange={(e) => setUploadForm({ ...uploadForm, height: Number(e.target.value) })} min={100} /></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => { setShowUploadModal(false); setMapFile(null); }}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
+      {assignMapModal && (<div className="modal-overlay" onClick={() => setAssignMapModal(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setAssignMapModal(null)}>×</button><h2>Jogadores em "{assignMapModal.name}"</h2><p style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Cada jogador ve apenas o mapa em que foi colocado. Sem atribuicao, ele segue o mapa ativo da mesa.</p>{members.filter((mm) => mm.role !== 'MASTER').map((mm) => { const mu = mm.user || mm; const uid = mm.userId || mu.id; return (<label key={uid} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}><input type="checkbox" checked={assignSel.has(uid)} onChange={() => toggleAssign(uid)} /><span>{mu.username}</span></label>); })}{members.filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa ainda.</p>}<div className="modal-actions"><button type="button" className="btn btn-sm" onClick={assignAll}>Todos</button><button type="button" className="btn btn-sm" onClick={assignNone}>Ninguem</button><button type="button" className="btn btn-secondary" onClick={() => setAssignMapModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? 'Salvando...' : 'Salvar'}</button></div></div></div>)}
       {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual</small></div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
       {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} />}
       {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} onSave={handleSaveGrid} />}

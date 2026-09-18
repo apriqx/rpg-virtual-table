@@ -175,7 +175,12 @@ async function duplicateMap(req, res) {
 async function deleteMap(req, res) {
   try {
     const { mapId, tableId } = req.params;
+    const affected = await prisma.tableMember.findMany({ where: { tableId, activeMapId: mapId } });
     await prisma.map.delete({ where: { id: mapId } });
+    for (const am of affected) {
+      await prisma.tableMember.update({ where: { id: am.id }, data: { activeMapId: null } });
+      broadcastToTable(tableId, 'member:map', { userId: am.userId, mapId: null });
+    }
     broadcastToTable(tableId, 'map:deleted', { mapId, tableId });
     res.json({ message: 'Mapa excluido' });
   } catch (error) { res.status(500).json({ error: 'Erro ao excluir mapa' }); }

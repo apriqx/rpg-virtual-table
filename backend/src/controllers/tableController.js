@@ -168,6 +168,26 @@ async function muteMember(req, res) {
   } catch (error) { res.status(500).json({ error: 'Erro ao alterar mute' }); }
 }
 
+async function setMemberMap(req, res) {
+  try {
+    const { tableId, userId } = req.params;
+    const { mapId } = req.body;
+    const member = await prisma.tableMember.findUnique({ where: { tableId_userId: { tableId, userId } } });
+    if (!member) return res.status(404).json({ error: 'Membro nao encontrado' });
+    if (mapId) {
+      const map = await prisma.map.findUnique({ where: { id: mapId } });
+      if (!map || map.tableId !== tableId) return res.status(400).json({ error: 'Mapa invalido' });
+    }
+    const updated = await prisma.tableMember.update({
+      where: { tableId_userId: { tableId, userId } },
+      data: { activeMapId: mapId || null },
+      include: { user: { select: { id: true, username: true, email: true } } },
+    });
+    broadcastToTable(tableId, 'member:map', { userId, mapId: mapId || null });
+    res.json(updated);
+  } catch (error) { res.status(500).json({ error: 'Erro ao definir mapa do membro' }); }
+}
+
 async function spotlight(req, res) {
   try {
     const { tableId } = req.params;
@@ -179,5 +199,5 @@ async function spotlight(req, res) {
 
 module.exports = {
   createTable, getTables, getTable, updateTable, deleteTable,
-  addMember, removeMember, updateMemberRole, muteMember, spotlight,
+  addMember, removeMember, updateMemberRole, muteMember, setMemberMap, spotlight,
 };

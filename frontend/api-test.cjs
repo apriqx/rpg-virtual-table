@@ -90,6 +90,12 @@ async function main() {
   const mapList = Array.isArray(r.data) ? r.data : [];
   ok('lista de mapas tem original + copia', mapList.length >= 2 && mapList.some((m) => m.id === mid) && mapList.some((m) => m.id === dupId));
   if (dupId) await req('DELETE', `/tables/${tid}/maps/${dupId}`, { token: mTok });
+  r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: mTok, body: { mapId: mid } });
+  ok('mestre define mapa do membro', r.status === 200 && r.data.activeMapId === mid);
+  r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: pTok, body: { mapId: null } });
+  ok('player nao define mapa -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/members/${pUser.id}/map`, { token: mTok, body: { mapId: null } });
+  ok('limpar mapa do membro', r.status === 200 && r.data.activeMapId === null);
   r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'GM Token', x: 10, y: 10, layer: 5 } });
   ok('mestre cria token camada 5 -> 201', r.status === 201 && r.data.token.layer === 5);
   const hiddenId = r.data.token.id;

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   createTable, getTables, getTable, updateTable, deleteTable,
-  addMember, removeMember, updateMemberRole, muteMember, spotlight
+  addMember, removeMember, updateMemberRole, muteMember, setMemberMap, spotlight
 } = require('../controllers/tableController');
 const { exportTable, importTable } = require('../controllers/backupController');
 const auth = require('../middleware/auth');
@@ -17,6 +17,7 @@ router.post('/:tableId/members', auth, requireMaster, addMember);
 router.delete('/:tableId/members/:userId', auth, requireMaster, removeMember);
 router.put('/:tableId/members/:userId', auth, requireMaster, updateMemberRole);
 router.put('/:tableId/members/:userId/mute', auth, requireMaster, muteMember);
+router.put('/:tableId/members/:userId/map', auth, requireMaster, setMemberMap);
 router.post('/:tableId/spotlight', auth, requireMaster, spotlight);
 router.get('/:tableId/export', auth, requireMaster, exportTable);
 router.post('/:tableId/import', auth, requireMaster, importTable);

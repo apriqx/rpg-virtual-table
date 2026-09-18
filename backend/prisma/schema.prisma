@@ -46,6 +46,7 @@ model TableMember {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   role     String   @default("PLAYER")
   muted    Boolean  @default(false)
+  activeMapId String?
   joinedAt DateTime @default(now())
 
   @@unique([tableId, userId])
