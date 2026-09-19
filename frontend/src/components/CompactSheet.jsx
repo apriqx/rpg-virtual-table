@@ -4,7 +4,7 @@ const mod = (score) => Math.floor(((Number(score) || 10) - 10) / 2);
 const fmtMod = (m) => (m >= 0 ? '+' + m : String(m));
 const AB_LABEL = { str: 'FOR', dex: 'DES', con: 'CON', int: 'INT', wis: 'SAB', cha: 'CAR' };
 
-export default function CompactSheet({ character, onClose, onOpenFull, isMaster }) {
+export default function CompactSheet({ character, onClose, onOpenFull, isMaster, embedded }) {
   const d = character.data || {};
   const ab = d.abilities || {};
   const hp = d.hp || { current: 0, max: 0, temp: 0 };
@@ -17,11 +17,10 @@ export default function CompactSheet({ character, onClose, onOpenFull, isMaster 
   const features = String(d.features || '').split('\n').map((f) => f.trim()).filter(Boolean);
   const subtitle = [d.race, d.className ? String(d.className) + (d.level ? ' ' + d.level : '') : '', d.background].filter(Boolean).join(' · ');
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal compact-sheet" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>×</button>
-        <div className="cs-header">
+  // Item 32: mesmo componente como janela flutuante (embedded) ou modal
+  const content = (
+    <>
+      <div className="cs-header">
           {d.portrait ? <img className="cs-portrait" src={resolveUrl(d.portrait)} alt="" /> : <div className="cs-portrait cs-portrait-empty">?</div>}
           <div className="cs-titles">
             <h2>{character.name}</h2>
@@ -63,8 +62,16 @@ export default function CompactSheet({ character, onClose, onOpenFull, isMaster 
           </div>
         )}
         {isMaster && onOpenFull && (
-          <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onOpenFull}>📖 Ficha do Jogador (completa)</button></div>
+          <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onOpenFull}>Ficha do Jogador (completa)</button></div>
         )}
+    </>
+  );
+  if (embedded) return <div className="compact-sheet-embedded">{content}</div>;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal compact-sheet" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>×</button>
+        {content}
       </div>
     </div>
   );

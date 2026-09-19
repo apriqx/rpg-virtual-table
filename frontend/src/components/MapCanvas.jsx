@@ -105,7 +105,10 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   );
 });
 
-function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken, onSelectionChange, onOpenSheet, onOpenCompactSheet, onRollDice }) {
+function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, drawings, annotations, isMaster, currentTool, onTokenMove, onFogUpdate, onAddToken, onTokenSelect, stageRef, brushSize, canMoveToken, masquerade, drawColor, fogShape, onDrawingCreated, onAnnotationCreated, onDrawingDeleted, onAnnotationDeleted, onAnnotationUpdated, activeTokenId, tableId, onTokenEdit, onTokenDuplicate, onTokenPatch, onTokenDelete, onTokenPermissions, canControlToken, onSelectionChange, onOpenSheet, onOpenCompactSheet, onRollDice }) {
+  const fogEnabled = !fogCfg || fogCfg.enabled !== false;
+  const fogColor = fogCfg && typeof fogCfg.color === 'string' ? fogCfg.color : '#000000';
+  const fogOpacity = Math.max(0, Math.min(1, Number(isMaster ? (fogCfg ? fogCfg.masterOpacity : 0.5) : (fogCfg ? fogCfg.playerOpacity : 0)) || 0));
   const containerRef = useRef(null);
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [stageScale, setStageScale] = useState(1);
@@ -403,8 +406,10 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
         )}
         <Layer>{playerTokens.map(renderToken)}</Layer>
         <Layer listening={false}>{gridLines}</Layer>
+        {/* Itens 16-22: cor/opacidade por papel; opacidade NAO e permissao - a ocultacao continua separada */}
+        {fogEnabled && (
         <Layer listening={false}>
-          <Rect x={0} y={0} width={map.width} height={map.height} fill="black" opacity={0.7} globalCompositeOperation="source-over" />
+          <Rect x={0} y={0} width={map.width} height={map.height} fill={fogColor} opacity={fogOpacity} globalCompositeOperation="source-over" />
           <Group globalCompositeOperation="destination-out">
             {fogRegions.filter((r) => r.revealed).map((r, i) => {
               if (r.shape === 'circle') return <Ellipse key={r.id || i} x={r.x + r.width / 2} y={r.y + r.height / 2} radiusX={r.width / 2} radiusY={r.height / 2} fill="white" />;
@@ -426,6 +431,7 @@ function MapCanvas({ map, tokens, gridConfig, fogRegions, drawings, annotations,
             })}
           </Group>
         </Layer>
+        )}
         {isMaster && (currentTool === 'fogReveal' || currentTool === 'fogHide') && (
           <Layer listening={false}>
             {(() => {

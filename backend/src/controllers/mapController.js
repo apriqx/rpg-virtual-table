@@ -132,6 +132,7 @@ async function duplicateMap(req, res) {
       include: {
         tokens: { include: { permissions: true } },
         gridConfig: true,
+        fogConfig: true,
         fogRegions: true,
         drawings: true,
         annotations: true,
@@ -158,6 +159,10 @@ async function duplicateMap(req, res) {
       if (src.gridConfig) {
         const { id, mapId: _g, ...g } = src.gridConfig;
         await tx.gridConfig.create({ data: { ...g, mapId: map.id } });
+      }
+      if (src.fogConfig) {
+        const { id, mapId: _fc, ...fc } = src.fogConfig;
+        await tx.fogConfig.create({ data: { ...fc, mapId: map.id } });
       }
       for (const f of src.fogRegions) {
         const { id, mapId: _f, ...fr } = f;

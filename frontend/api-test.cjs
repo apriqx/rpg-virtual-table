@@ -260,6 +260,18 @@ async function main() {
   await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${barTokId}`, { token: mTok });
   await req('DELETE', `/tables/${tid}/characters/${barCharId}`, { token: mTok });
 
+  // ---- configuracao da neblina (itens 14-25) ----
+  r = await req('GET', `/tables/${tid}/maps/${mid}/fog-config`, { token: pTok });
+  ok('jogador le neblina padrao (mestre 50% jogador 0%)', r.status === 200 && r.data.fogConfig.enabled === true && r.data.fogConfig.masterOpacity === 0.5 && r.data.fogConfig.playerOpacity === 0 && r.data.fogConfig.color === '#000000');
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/fog-config`, { token: pTok, body: { enabled: false } });
+  ok('jogador nao altera neblina -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/fog-config`, { token: mTok, body: { color: '#241b45', masterOpacity: 0.7, playerOpacity: 0.3, enabled: true } });
+  ok('mestre salva neblina roxa -> 200', r.status === 200 && r.data.fogConfig.color === '#241b45' && r.data.fogConfig.masterOpacity === 0.7 && r.data.fogConfig.playerOpacity === 0.3);
+  r = await req('GET', `/tables/${tid}/maps/${mid}/fog-config`, { token: pTok });
+  ok('jogador recebe neblina sincronizada', r.status === 200 && r.data.fogConfig.color === '#241b45' && r.data.fogConfig.playerOpacity === 0.3);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/fog-config`, { token: mTok, body: { color: 'javascript:alert(1)', masterOpacity: 5, playerOpacity: -1 } });
+  ok('neblina sanitiza: opacidades 0-1 e cor invalida nao altera', r.status === 200 && r.data.fogConfig.color === '#241b45' && r.data.fogConfig.masterOpacity === 1 && r.data.fogConfig.playerOpacity === 0);
+
   // ---- fichas: kinds (pc/npc/monster) + permissoes ----
   r = await req('POST', `/tables/${tid}/characters`, { token: pTok, body: { name: 'NPC Roubado', kind: 'npc' } });
   ok('player nao cria NPC -> 403', r.status === 403);

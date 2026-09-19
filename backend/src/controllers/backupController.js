@@ -16,7 +16,7 @@ async function exportTable(req, res) {
     const characters = await prisma.character.findMany({ where: { tableId }, include: { user: { select: { username: true } } }, orderBy: { createdAt: 'asc' } });
     const maps = await prisma.map.findMany({
       where: { tableId },
-      include: { gridConfig: true, fogRegions: true, drawings: true, annotations: true, tokens: { include: { permissions: { include: { user: { select: { username: true } } } }, owner: { select: { username: true } } } } },
+      include: { gridConfig: true, fogConfig: true, fogRegions: true, drawings: true, annotations: true, tokens: { include: { permissions: { include: { user: { select: { username: true } } } }, owner: { select: { username: true } } } } },
       orderBy: { createdAt: 'asc' },
     });
     const charIndex = new Map(characters.map((c, i) => [c.id, i]));
@@ -28,6 +28,7 @@ async function exportTable(req, res) {
       maps: maps.map((m) => ({
         ...pick(m, MAP_COLUMNS),
         gridConfig: m.gridConfig ? pick(m.gridConfig, GRID_COLUMNS) : null,
+        fogConfig: m.fogConfig ? pick(m.fogConfig, ['enabled', 'color', 'masterOpacity', 'playerOpacity']) : null,
         fogRegions: m.fogRegions.map((f) => pick(f, ['x', 'y', 'width', 'height', 'revealed', 'shape', 'points'])),
         drawings: m.drawings.map((d) => pick(d, ['color', 'lineWidth', 'points', 'layer'])),
         annotations: m.annotations.map((a) => pick(a, ['text', 'x', 'y', 'color', 'fontSize'])),
@@ -70,6 +71,10 @@ async function importTable(req, res) {
         if (m.gridConfig) {
           const g = m.gridConfig;
           await tx.gridConfig.create({ data: { mapId: map.id, cellSize: num(g.cellSize, 40), physicalSize: num(g.physicalSize, 1.5), visible: g.visible !== false, lineThickness: num(g.lineThickness, 1), lineOpacity: num(g.lineOpacity, 0.5), offsetX: num(g.offsetX, 0), offsetY: num(g.offsetY, 0), snapToGrid: g.snapToGrid === true } });
+        }
+        if (m.fogConfig) {
+          const fc = m.fogConfig;
+          await tx.fogConfig.create({ data: { mapId: map.id, enabled: fc.enabled !== false, color: typeof fc.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(fc.color) ? fc.color.slice(0, 9) : '#000000', masterOpacity: Math.max(0, Math.min(1, num(fc.masterOpacity, 0.5))), playerOpacity: Math.max(0, Math.min(1, num(fc.playerOpacity, 0))) } });
         }
         for (const f of (m.fogRegions || [])) {
           if ([f.x, f.y, f.width, f.height].every((v) => typeof v === 'number' && Number.isFinite(v))) await tx.fogOfWarRegion.create({ data: { mapId: map.id, x: f.x, y: f.y, width: f.width, height: f.height, revealed: f.revealed === true, shape: ['rect', 'circle', 'polygon'].includes(f.shape) ? f.shape : 'rect', points: Array.isArray(f.points) ? f.points : null } });

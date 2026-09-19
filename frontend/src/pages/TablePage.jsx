@@ -16,11 +16,17 @@ import Soundboard, { playSound, isSoundMuted } from '../components/Soundboard';
 import CharacterList from '../components/CharacterList';
 import CharacterSheet from '../components/CharacterSheet';
 import CompactSheet from '../components/CompactSheet';
+import FloatingWindow from '../components/FloatingWindow';
 
 const DEFAULT_GRID = {
   cellSize: 50, physicalSize: 1.5, visible: true,
   lineThickness: 1, lineOpacity: 0.3, offsetX: 0, offsetY: 0, snapToGrid: false,
 };
+
+// Itens 16-19: padroes da neblina (mestre 50%, jogador 0%)
+const DEFAULT_FOG = { enabled: true, color: '#000000', masterOpacity: 0.5, playerOpacity: 0 };
+const FULL_SHEET_SIZE = { w: 780, h: 700 };
+const COMPACT_SHEET_SIZE = { w: 430, h: 560 };
 
 export default function TablePage() {
   const { tableId } = useParams();
@@ -62,8 +68,9 @@ export default function TablePage() {
   }
   const [showDice, setShowDice] = useState(false);
   const [showCharList, setShowCharList] = useState(false);
-  const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [compactCharacter, setCompactCharacter] = useState(null);
+  // Itens 5-12: varias fichas abertas, cada uma com posicao/tamanho/estado proprios
+  const [openSheets, setOpenSheets] = useState([]);
+  const [fogConfig, setFogConfig] = useState(DEFAULT_FOG);
   const [characters, setCharacters] = useState([]);
   const [drawColor, setDrawColor] = useState('#e94560');
 
@@ -113,14 +120,16 @@ export default function TablePage() {
 
   const loadMapData = useCallback(async (mapId) => {
     try {
-      const [mapData, gridData, fogData] = await Promise.all([
+      const [mapData, gridData, fogData, fogCfg] = await Promise.all([
         api.maps.getOne(tableId, mapId),
         api.grid.get(tableId, mapId).catch(() => ({ gridConfig: DEFAULT_GRID })),
         api.fog.getAll(tableId, mapId).catch(() => []),
+        api.fog.getConfig(tableId, mapId).catch(() => ({ fogConfig: DEFAULT_FOG })),
       ]);
       setTokens(mapData.tokens || []);
       setGridConfig(gridData.gridConfig || DEFAULT_GRID);
       setFogRegions(Array.isArray(fogData) ? fogData : fogData.fogRegions || []);
+      setFogConfig(fogCfg.fogConfig || DEFAULT_FOG);
       setDrawings(mapData.drawings || []);
       setAnnotations(mapData.annotations || []);
     } catch (err) { console.error(err); }
@@ -159,8 +168,9 @@ export default function TablePage() {
     c.push(onSocket('chat:whisper', () => { if (!showChatRef.current) setUnreadChat((n) => n + 1); }));
     c.push(onSocket('chat:cleared', () => {}));
     c.push(onSocket('character:created', ({ character }) => setCharacters((p) => p.some((c) => c.id === character.id) ? p : [...p, character])));
-    c.push(onSocket('character:updated', ({ character }) => { setCharacters((p) => p.map((c) => c.id === character.id ? { ...c, ...character } : c)); if (selectedCharacter?.id === character.id) setSelectedCharacter((s) => s ? { ...s, ...character } : s); setTokens((p) => p.map((t) => t.characterId === character.id ? { ...t, character } : t)); }));
-    c.push(onSocket('character:deleted', ({ characterId: cid }) => { setCharacters((p) => p.filter((c) => c.id !== cid)); if (selectedCharacter?.id === cid) setSelectedCharacter(null); }));
+    c.push(onSocket('character:updated', ({ character }) => { setCharacters((p) => p.map((c) => c.id === character.id ? { ...c, ...character } : c)); setOpenSheets((p) => p.map((s) => (s.character.id === character.id ? { ...s, character: { ...s.character, ...character } } : s))); setTokens((p) => p.map((t) => t.characterId === character.id ? { ...t, character } : t)); }));
+    c.push(onSocket('character:deleted', ({ characterId: cid }) => { setCharacters((p) => p.filter((c) => c.id !== cid)); setOpenSheets((p) => p.filter((s) => s.character.id !== cid)); }));
+    c.push(onSocket('fog:updated', ({ mapId, fogConfig: fc }) => { if (activeMap?.id === mapId) setFogConfig((p) => ({ ...p, ...fc })); }));
     c.push(onSocket('drawing:created', ({ drawing }) => setDrawings((p) => [...p, drawing])));
     c.push(onSocket('drawing:deleted', ({ drawingId }) => setDrawings((p) => p.filter((d) => d.id !== drawingId))));
     c.push(onSocket('drawings:cleared', () => setDrawings([])));
@@ -179,7 +189,7 @@ export default function TablePage() {
       else if (tokenId) { const t = tokens.find((t) => t.id === tokenId); if (t) { const stage = stageRef.current; if (stage) { const w = stage.width(); const h = stage.height(); stage.position({ x: w / 2 - (t.x + t.width / 2) * stage.scaleX(), y: h / 2 - (t.y + t.height / 2) * stage.scaleY() }); stage.batchDraw(); } } }
     }));
     return () => c.forEach((f) => f());
-  }, [tableId, activeMap?.id, maps, loadMapData, selectedCharacter?.id, tokens]);
+  }, [tableId, activeMap?.id, maps, loadMapData, tokens]);
 
   async function handleSwitchMap(mapId) {
     if (!isMasterRef.current && myMapIdRef.current && mapId !== myMapIdRef.current) return;
@@ -328,20 +338,53 @@ export default function TablePage() {
   }
 
   async function handleToggleGrid() { const nc = { ...gridConfig, visible: !gridConfig.visible }; setGridConfig(nc); try { await api.grid.update(tableId, activeMap.id, nc); } catch {} }
-  async function handleSaveGrid(nc) { setGridConfig(nc); try { await api.grid.update(tableId, activeMap.id, nc); setShowGridModal(false); } catch { alert('Erro ao salvar grade'); } }
+  // Itens 14-15: painel unico de GRADE + NEBLINA; item 24: persistente no servidor
+  async function handleSaveMapSettings(grid, fog) {
+    if (grid) { setGridConfig(grid); try { await api.grid.update(tableId, activeMap.id, grid); } catch { alert('Erro ao salvar grade'); } }
+    if (fog) { setFogConfig(fog); try { await api.fog.updateConfig(tableId, activeMap.id, fog); } catch { alert('Erro ao salvar neblina'); } }
+    setShowGridModal(false);
+  }
 
   function handleTokenSelect(tokenId) {
     const t = tokens.find((t) => t.id === tokenId); if (!t) return; setSelectedToken(t);
   }
 
+  // Itens 5-12: abre (ou foca/restaura) uma janela de ficha com geometria propria
+  const sheetZRef = useRef(2000);
+  function openSheetWindow(character, kind) {
+    sheetZRef.current += 1;
+    const key = `${kind}-${character.id}`;
+    setOpenSheets((p) => {
+      const existing = p.find((s) => s.key === key);
+      if (existing) {
+        return p.map((s) => (s.key === key ? { ...s, minimized: false, z: sheetZRef.current } : s));
+      }
+      const size = kind === 'full' ? FULL_SHEET_SIZE : COMPACT_SHEET_SIZE;
+      const n = p.length;
+      const w = Math.min(size.w, window.innerWidth - 24);
+      const h = Math.min(size.h, window.innerHeight - 100);
+      return [...p, { key, character, kind, x: 80 + (n % 6) * 28, y: 60 + (n % 6) * 28, w, h, minimized: false, z: sheetZRef.current }];
+    });
+  }
+
+  function updateSheetWindow(key, patch) { setOpenSheets((p) => p.map((s) => (s.key === key ? { ...s, ...patch } : s))); }
+  function focusSheetWindow(key) { sheetZRef.current += 1; const z = sheetZRef.current; setOpenSheets((p) => p.map((s) => (s.key === key ? { ...s, z } : s))); }
+  function closeSheetWindow(key) { setOpenSheets((p) => p.filter((s) => s.key !== key)); }
+  // Item 11: restaura na posicao/tamanho anteriores
+  function restoreSheetWindow(key) {
+    sheetZRef.current += 1;
+    const z = sheetZRef.current;
+    setOpenSheets((p) => p.map((s) => (s.key === key ? { ...s, minimized: false, z, ...(s.restore || {}) } : s)));
+  }
+
   async function openTokenSheet(token) {
     if (!token || !token.characterId) { alert('Este token nao tem ficha vinculada.'); return; }
-    try { const c = await api.characters.getOne(tableId, token.characterId); setSelectedCharacter(c); } catch { alert('Voce nao tem acesso a esta ficha.'); }
+    try { const c = await api.characters.getOne(tableId, token.characterId); openSheetWindow(c, 'full'); } catch { alert('Voce nao tem acesso a esta ficha.'); }
   }
 
   async function openCompactSheet(token) {
     if (!token || !token.characterId) { alert('Este token nao tem ficha vinculada.'); return; }
-    try { const c = await api.characters.getOne(tableId, token.characterId); setCompactCharacter(c); } catch { alert('Voce nao tem acesso a esta ficha.'); }
+    try { const c = await api.characters.getOne(tableId, token.characterId); openSheetWindow(c, 'compact'); } catch { alert('Voce nao tem acesso a esta ficha.'); }
   }
 
   async function handleSavePermissions(p) { try { await api.tokens.setPermissions(tableId, activeMap.id, selectedToken.id, p); await loadMapData(activeMap.id); setShowPermModal(false); setSelectedToken(null); } catch { alert('Erro ao salvar permissoes'); } }
@@ -505,7 +548,7 @@ export default function TablePage() {
     try { await api.drawings.clear(tableId, activeMap.id); } catch {}
   }
 
-  function handleSelectCharacter(char) { setSelectedCharacter(char); }
+  function handleSelectCharacter(char) { openSheetWindow(char, 'full'); }
 
   async function handleToggleMasquerade() {
     try { await api.tables.update(tableId, { masquerade: !masquerade }); setTable((p) => p ? { ...p, masquerade: !p.masquerade } : p); } catch {}
@@ -624,7 +667,7 @@ export default function TablePage() {
         </div>
         {activeMap ? (
           <Suspense fallback={<div className="loading">Carregando mapa...</div>}>
-            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} onTokenEdit={handleEditToken} onTokenDuplicate={handleTokenDuplicate} onTokenPatch={handleTokenPatch} onTokenDelete={handleTokenDeleteFromMenu} onTokenPermissions={openTokenPermissions} canControlToken={canControlToken} onSelectionChange={handleSelectionChange} onOpenSheet={openTokenSheet} onOpenCompactSheet={openCompactSheet} onRollDice={() => setShowDice(true)} />
+            <MapCanvas map={activeMap} tokens={visibleTokens} gridConfig={gridConfig} fogConfig={fogConfig} fogRegions={fogRegions} drawings={drawings} annotations={annotations} isMaster={isMaster} currentTool={currentTool} onTokenMove={handleTokenMove} onFogUpdate={handleFogUpdate} onAddToken={handleAddToken} onTokenSelect={handleTokenSelect} stageRef={stageRef} brushSize={brushSize} fogShape={fogShape} canMoveToken={canMoveToken} masquerade={masquerade} drawColor={drawColor} onDrawingCreated={handleDrawingCreated} onAnnotationCreated={handleAnnotationCreated} onDrawingDeleted={handleDrawingDeleted} onAnnotationDeleted={handleAnnotationDeleted} onAnnotationUpdated={handleAnnotationUpdated} activeTokenId={activeCombatTokenId} tableId={tableId} onTokenEdit={handleEditToken} onTokenDuplicate={handleTokenDuplicate} onTokenPatch={handleTokenPatch} onTokenDelete={handleTokenDeleteFromMenu} onTokenPermissions={openTokenPermissions} canControlToken={canControlToken} onSelectionChange={handleSelectionChange} onOpenSheet={openTokenSheet} onOpenCompactSheet={openCompactSheet} onRollDice={() => setShowDice(true)} />
           </Suspense>
         ) : <div className="empty-state">{isMaster ? 'Envie um mapa para comecar' : 'Nenhum mapa disponivel'}</div>}
       </div>
@@ -638,12 +681,30 @@ export default function TablePage() {
       {assignMapModal && (<div className="modal-overlay" onClick={() => setAssignMapModal(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setAssignMapModal(null)}>×</button><h2>Jogadores em "{assignMapModal.name}"</h2><p style={{ color: '#aaa', fontSize: 12, marginBottom: 8 }}>Cada jogador ve apenas o mapa em que foi colocado. Sem atribuicao, ele segue o mapa ativo da mesa.</p>{members.filter((mm) => mm.role !== 'MASTER').map((mm) => { const mu = mm.user || mm; const uid = mm.userId || mu.id; return (<label key={uid} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '3px 0' }}><input type="checkbox" checked={assignSel.has(uid)} onChange={() => toggleAssign(uid)} /><span>{mu.username}</span></label>); })}{members.filter((mm) => mm.role !== 'MASTER').length === 0 && <p style={{ color: '#aaa' }}>Nenhum jogador na mesa ainda.</p>}<div className="modal-actions"><button type="button" className="btn btn-sm" onClick={assignAll}>Todos</button><button type="button" className="btn btn-sm" onClick={assignNone}>Ninguem</button><button type="button" className="btn btn-secondary" onClick={() => setAssignMapModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveAssign} disabled={assignSaving}>{assignSaving ? 'Salvando...' : 'Salvar'}</button></div></div></div>)}
       {editingMap && (<div className="modal-overlay" onClick={() => setEditingMap(null)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setEditingMap(null)}>×</button><h2>Editar Mapa</h2><form onSubmit={handleUpdateMap}><div className="form-group"><label>Nome</label><input value={editMapForm.name} onChange={(e) => setEditMapForm({ ...editMapForm, name: e.target.value })} required /></div><div className="form-group"><label>Substituir imagem/video por arquivo (opcional)</label><input type="file" accept="image/*,video/*" onChange={(e) => setEditMapFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} /><small style={{ color: '#aaa' }}>Deixe vazio para manter a imagem atual. Se escolher um arquivo, ele tem prioridade sobre a URL.</small></div><div className="form-group"><label>URL da imagem</label><input type="url" placeholder="https://exemplo.com/mapa.jpg" value={editMapForm.imageUrl || ''} onChange={(e) => setEditMapForm({ ...editMapForm, imageUrl: e.target.value })} /><small style={{ color: '#aaa' }}>{editMapFile ? 'Um arquivo foi escolhido: ele substituira a imagem ao salvar.' : 'Eh a imagem atual deste mapa. Altere para trocar por outra URL; mantenha para preservar.'}</small>{!editMapFile && editMapForm.imageUrl && <img src={resolveUrl(editMapForm.imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} onError={(ev) => { ev.target.style.display = 'none'; }} />}</div><div className="form-group" style={{ display: 'flex', gap: '10px' }}><div style={{ flex: 1 }}><label>Largura (px)</label><input type="number" value={editMapForm.width} onChange={(e) => setEditMapForm({ ...editMapForm, width: e.target.value })} min={100} /></div><div style={{ flex: 1 }}><label>Altura (px)</label><input type="number" value={editMapForm.height} onChange={(e) => setEditMapForm({ ...editMapForm, height: e.target.value })} min={100} /></div></div><div className="form-group"><label><input type="checkbox" checked={Boolean(editMapForm.darkMode)} onChange={(e) => setEditMapForm({ ...editMapForm, darkMode: e.target.checked })} /> Modo escuro (visao no escuro)</label><small style={{ color: '#aaa' }}>Quando ativo, cada token visivel ilumina a neblina ao redor de si: 6 celulas por padrao, ou o raio de visao proprio do token, se definido.</small></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setEditingMap(null)}>Cancelar</button><button type="submit" className="btn btn-primary">Salvar</button></div></form></div></div>)}
       {showTokenModal && <TokenDialog open={showTokenModal} onClose={() => { setShowTokenModal(false); setTokenClickPos(null); setEditingToken(null); }} onSubmit={handleTokenSubmit} members={members} tableId={tableId} token={editingToken} cellSize={gridConfig.cellSize} onOpenPermissions={openTokenPermissions} isMaster={isMaster} />}
-      {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} onSave={handleSaveGrid} />}
+      {showGridModal && <GridSettings open={showGridModal} onClose={() => setShowGridModal(false)} config={gridConfig} fogConfig={fogConfig} onSave={handleSaveMapSettings} />}
       {showPermModal && selectedToken && <PermissionDialog open={showPermModal} onClose={() => { setShowPermModal(false); setSelectedToken(null); }} token={selectedToken} members={members} tableId={tableId} mapId={activeMap.id} onSave={handleSavePermissions} />}
       {showAddMemberModal && (<div className="modal-overlay" onClick={() => setShowAddMemberModal(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowAddMemberModal(false)}>×</button><h2>Adicionar Membro</h2><form onSubmit={handleAddMember}><div className="form-group"><label>Usuario (nome ou e-mail)</label><input value={addMemberForm.username} onChange={(e) => setAddMemberForm({ ...addMemberForm, username: e.target.value })} placeholder="ex: alice ou alice@email.com" required /></div><div className="form-group"><label>Cargo</label><select value={addMemberForm.role} onChange={(e) => setAddMemberForm({ ...addMemberForm, role: e.target.value })}><option value="PLAYER">Jogador</option><option value="MASTER">Mestre</option></select></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
       {showCharList && <CharacterList tableId={tableId} userId={user.id} isMaster={isMaster} onClose={() => setShowCharList(false)} onSelectCharacter={handleSelectCharacter} />}
-      {selectedCharacter && <CharacterSheet character={selectedCharacter} tableId={tableId} onClose={() => setSelectedCharacter(null)} isOwner={selectedCharacter.userId === user.id} isMaster={isMaster} userId={user.id} members={members} />}
-      {compactCharacter && <CompactSheet character={compactCharacter} onClose={() => setCompactCharacter(null)} isMaster={isMaster} onOpenFull={() => { setSelectedCharacter(compactCharacter); setCompactCharacter(null); }} />}
+      {openSheets.map((s) => (
+        <FloatingWindow key={s.key} title={`${s.kind === 'compact' ? 'Ficha rapida' : 'Ficha'} — ${s.character.name}`} win={s} z={s.z}
+          onChange={(patch) => updateSheetWindow(s.key, patch)} onClose={() => closeSheetWindow(s.key)} onFocus={() => focusSheetWindow(s.key)}>
+          {s.kind === 'full'
+            ? <CharacterSheet character={s.character} tableId={tableId} onClose={() => closeSheetWindow(s.key)} isOwner={s.character.userId === user.id} isMaster={isMaster} userId={user.id} members={members} embedded />
+            : <CompactSheet character={s.character} onClose={() => closeSheetWindow(s.key)} isMaster={isMaster} embedded onOpenFull={() => updateSheetWindow(s.key, { kind: 'full', w: Math.min(FULL_SHEET_SIZE.w, window.innerWidth - 24), h: Math.min(FULL_SHEET_SIZE.h, window.innerHeight - 100) })} />}
+        </FloatingWindow>
+      ))}
+      {openSheets.length > 0 && (
+        <div className="sheet-taskbar">
+          <span className="sheet-taskbar-label">Fichas abertas:</span>
+          {openSheets.map((s) => (
+            <button key={s.key} type="button" className={'sheet-taskbar-item' + (s.minimized ? ' minimized' : ' active')}
+              onClick={() => (s.minimized ? restoreSheetWindow(s.key) : focusSheetWindow(s.key))}
+              title={s.minimized ? 'Restaurar ficha' : 'Trazer para frente'}>
+              {s.character.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

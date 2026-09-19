@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api, { resolveUrl } from '../services/api';
 import Dnd5eSheetBody from './Dnd5eSheetBody';
 
-export default function CharacterSheet({ character, tableId, onClose, isOwner, isMaster, userId, members }) {
+export default function CharacterSheet({ character, tableId, onClose, isOwner, isMaster, userId, members, embedded }) {
   const [data, setData] = useState(character.data || {});
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(character.data || {});
@@ -149,11 +149,10 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
     setEditData(d);
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal char-sheet-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>×</button>
-        <div className="char-header">
+  // Itens 5-13/32: como janela flutuante (embedded) reutiliza TODO o conteudo
+  const content = (
+    <>
+      <div className="char-header">
           <div className="char-portrait">
             {(editing ? editData.portrait : data.portrait)
               ? <img src={resolveUrl(editing ? editData.portrait : data.portrait)} alt="retrato" />
@@ -263,6 +262,14 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
             </div>
           </div>
         )}
+    </>
+  );
+  if (embedded) return <div className="char-sheet-embedded">{content}</div>;
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal char-sheet-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>×</button>
+        {content}
       </div>
     </div>
   );

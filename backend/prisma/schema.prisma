@@ -115,6 +115,7 @@ model Map {
   updatedAt  DateTime @updatedAt
   tokens     Token[]
   gridConfig GridConfig?
+  fogConfig  FogConfig?
   fogRegions FogOfWarRegion[]
   drawings   Drawing[]
   annotations Annotation[]
@@ -191,6 +192,17 @@ model FogOfWarRegion {
   revealed Boolean @default(false)
   shape    String  @default("rect")
   points   Json?
+}
+
+// Itens 16-24: configuracao visual da neblina por mapa (exclusiva do mestre)
+model FogConfig {
+  id            String  @id @default(uuid())
+  mapId         String  @unique
+  map           Map     @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  enabled       Boolean @default(true)
+  color         String  @default("#000000")
+  masterOpacity Float   @default(0.5)
+  playerOpacity Float   @default(0)
 }
 
 model Drawing {
