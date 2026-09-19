@@ -20,6 +20,7 @@ const characterRoutes = require('./routes/characters');
 const drawingRoutes = require('./routes/drawings');
 const annotationRoutes = require('./routes/annotations');
 const uploadRoutes = require('./routes/uploads');
+const sheetRoutes = require('./routes/sheets');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +50,7 @@ app.use('/api/tables', chatRoutes);
 app.use('/api/tables', characterRoutes);
 app.use('/api/tables', drawingRoutes);
 app.use('/api/tables', annotationRoutes);
+app.use('/api/tables', sheetRoutes);
 app.use('/api/uploads', uploadRoutes);
 
 app.get('/api/health', async (req, res) => {

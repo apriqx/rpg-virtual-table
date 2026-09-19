@@ -38,6 +38,15 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
 
   function cancelEdit() { setEditing(false); }
 
+  // Itens 15/17: mestre decide se o NPC aparece para os jogadores (itens 1/3 do pedido)
+  const [npcVisible, setNpcVisible] = useState(character.visibleToPlayers === true);
+  async function toggleNpcVisible() {
+    const next = !npcVisible;
+    setNpcVisible(next);
+    try { await api.characters.update(tableId, character.id, { visibleToPlayers: next }); }
+    catch { setNpcVisible(!next); alert('Erro ao alterar visibilidade do NPC'); }
+  }
+
   async function quickHp(delta) {
     const cur = data.hp || { current: 0, max: 0, temp: 0 };
     const newHp = { ...cur, current: Math.max(0, Math.min(cur.max || 999, (cur.current || 0) + delta)) };
@@ -160,7 +169,13 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
           </div>
           <h2 style={{ flex: 1 }}>{character.name}</h2>
           {(isMaster || isOwner) && (
-            <button className="btn btn-sm btn-secondary" title="Compartilhar esta ficha com outros jogadores" onClick={openPerms}>👥 Compartilhar</button>
+            <button className="btn btn-sm btn-secondary" title="Compartilhar esta ficha com outros jogadores" onClick={openPerms}>?? Compartilhar</button>
+          )}
+          {isMaster && character.kind === 'npc' && (
+            <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 12 }} title="Quando ativo, todos os jogadores podem abrir esta ficha de NPC">
+              <input type="checkbox" checked={npcVisible} onChange={toggleNpcVisible} />
+              Visivel p/ jogadores
+            </label>
           )}
           {canControl && !editing && (
             <button className="btn btn-sm btn-primary" onClick={startEdit}>Editar</button>

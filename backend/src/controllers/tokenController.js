@@ -1,7 +1,7 @@
 const { prisma } = require('../config/database');
 const { broadcastToTable } = require('../socket');
 
-const TOKEN_INCLUDE = { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } };
+const TOKEN_INCLUDE = { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, kind: true, system: true, visibleToPlayers: true, data: true } } };
 
 function sanitizeFieldPath(v) {
   if (typeof v !== 'string') return null;
@@ -27,6 +27,14 @@ function sanitizeMarkers(markers) {
   return [...new Set(markers.filter((m) => typeof m === 'string' && m.length <= 24).map((m) => m))].slice(0, 20);
 }
 
+// Itens 15/39: dados internos de monstro (PV, CA, ataques) nunca chegam ao cliente
+function sanitizeMonsterCharacter(token) {
+  if (token && token.character && token.character.kind === 'monster') {
+    return { ...token, character: { id: token.character.id, name: token.character.name, kind: 'monster', system: token.character.system, data: {}, visibleToPlayers: false } };
+  }
+  return token;
+}
+
 function filterTokensForPlayer(tokens, userId) {
   return tokens.filter((token) => {
     if (!token.visible) return false;
@@ -35,7 +43,7 @@ function filterTokensForPlayer(tokens, userId) {
     const perm = token.permissions.find((p) => p.userId === userId);
     if (!perm) return false;
     return perm.canView;
-  });
+  }).map(sanitizeMonsterCharacter);
 }
 async function createToken(req, res) {
   try {
@@ -45,7 +53,7 @@ async function createToken(req, res) {
       data: { mapId, name, imageUrl: imageUrl || null, type: type || 'character', x: parseFloat(x) || 0, y: parseFloat(y) || 0, width: parseFloat(width) || 40, height: parseFloat(height) || 40, rotation: parseFloat(rotation) || 0, layer: parseInt(layer, 10) || 2, visible: visible !== undefined ? visible : true, locked: locked !== undefined ? locked : false, snapToGrid: snapToGrid !== undefined ? snapToGrid : true, ownerId: ownerId || null, characterId: characterId || null, lightRadius: Math.max(0, parseFloat(lightRadius) || 0), visionRadius: Math.max(0, parseFloat(visionRadius) || 0), displayName: displayName ? String(displayName).slice(0, 60) : null, showName: showName !== undefined ? showName : true, opacity: Math.min(1, Math.max(0.1, opacity === undefined ? 1 : parseFloat(opacity) || 1)), bars: sanitizeBars(bars), statusMarkers: sanitizeMarkers(statusMarkers) },
       include: TOKEN_INCLUDE,
     });
-    broadcastToTable(tableId, 'token:created', { token, mapId });
+    broadcastToTable(tableId, 'token:created', { token: sanitizeMonsterCharacter(token), mapId });
     res.status(201).json({ token });
   } catch (error) { res.status(500).json({ error: 'Erro ao criar token' }); }
 }
@@ -55,7 +63,7 @@ async function getTokens(req, res) {
     const { mapId } = req.params;
     const membership = await prisma.tableMember.findUnique({ where: { tableId_userId: { tableId: req.params.tableId, userId: req.user.id } }, select: { role: true } });
     const isPrivileged = req.user.role === 'ADMIN' || (membership && membership.role === 'MASTER');
-    const tokens = await prisma.token.findMany({ where: { mapId }, include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } } });
+    const tokens = await prisma.token.findMany({ where: { mapId }, include: TOKEN_INCLUDE });
     if (isPrivileged) return res.json(tokens);
     res.json(filterTokensForPlayer(tokens, req.user.id));
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar tokens' }); }
@@ -96,7 +104,7 @@ async function updateToken(req, res) {
     if (req.body.lightRadius !== undefined) data.lightRadius = Math.max(0, parseFloat(req.body.lightRadius) || 0);
     if (req.body.visionRadius !== undefined) data.visionRadius = Math.max(0, parseFloat(req.body.visionRadius) || 0);
     const token = await prisma.token.update({ where: { id: tokenId }, data, include: { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } } });
-    broadcastToTable(tableId, 'token:updated', { token, mapId });
+    broadcastToTable(tableId, 'token:updated', { token: sanitizeMonsterCharacter(token), mapId });
     res.json(token);
   } catch (error) { res.status(500).json({ error: 'Erro ao atualizar token' }); }
 }
@@ -162,7 +170,7 @@ async function duplicateToken(req, res) {
       await prisma.tokenPermission.createMany({ data: original.permissions.map((p) => ({ tokenId: token.id, userId: p.userId, canView: p.canView, canMove: p.canMove, canResize: p.canResize, canDelete: p.canDelete })) });
     }
     const full = await prisma.token.findUnique({ where: { id: token.id }, include: TOKEN_INCLUDE });
-    broadcastToTable(tableId, 'token:created', { token: full, mapId });
+    broadcastToTable(tableId, 'token:created', { token: sanitizeMonsterCharacter(full), mapId });
     res.status(201).json({ token: full });
   } catch (error) { res.status(500).json({ error: 'Erro ao duplicar token' }); }
 }

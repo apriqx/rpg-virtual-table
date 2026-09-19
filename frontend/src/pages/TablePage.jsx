@@ -17,6 +17,8 @@ import CharacterList from '../components/CharacterList';
 import CharacterSheet from '../components/CharacterSheet';
 import CompactSheet from '../components/CompactSheet';
 import FloatingWindow from '../components/FloatingWindow';
+import SheetList from '../components/SheetList';
+import { unlockAudio, playNotifySound, playDiceSound, isNotifySoundEnabled, setNotifySoundEnabled } from '../services/notification';
 
 const DEFAULT_GRID = {
   cellSize: 50, physicalSize: 1.5, visible: true,
@@ -54,6 +56,9 @@ export default function TablePage() {
   const [unreadChat, setUnreadChat] = useState(0);
   const [whisperTarget, setWhisperTarget] = useState(null);
   const [activeCombatTokenId, setActiveCombatTokenId] = useState(null);
+  const [showSheets, setShowSheets] = useState(false);
+  const [sheets, setSheets] = useState([]);
+  const [soundOn, setSoundOn] = useState(() => isNotifySoundEnabled());
 
   function toggleChat() {
     const next = !showChatRef.current;
@@ -135,8 +140,16 @@ export default function TablePage() {
     } catch (err) { console.error(err); }
   }, [tableId]);
 
+  // Itens 14-20/22: folhas do mestre (jogador recebe so as visiveis, sem notas privadas)
+  const loadSheets = useCallback(async () => {
+    try { setSheets(await api.sheets.getAll(tableId)); } catch (err) { console.error(err); }
+  }, [tableId]);
+  const loadSheetsRef = useRef(loadSheets);
+  useEffect(() => { loadSheetsRef.current = loadSheets; }, [loadSheets]);
+
   useEffect(() => {
     loadTable();
+    loadSheets();
     const token = localStorage.getItem('token');
     if (token) { connectSocket(token); setTimeout(() => emitSocket('join:table', tableId), 500); }
     return () => { emitSocket('leave:table', tableId); disconnectSocket(); };
@@ -150,6 +163,7 @@ export default function TablePage() {
     c.push(onSocket('token:permissions', ({ tokenId, permissions }) => setTokens((p) => p.map((t) => t.id === tokenId ? { ...t, permissions } : t))));
     c.push(onSocket('fog:updated', async ({ mapId }) => { if (activeMap?.id === mapId) { const d = await api.fog.getAll(tableId, mapId).catch(() => []); setFogRegions(Array.isArray(d) ? d : d.fogRegions || []); } }));
     c.push(onSocket('grid:updated', ({ mapId, gridConfig: gc }) => { if (activeMap?.id === mapId) setGridConfig(gc); }));
+    c.push(onSocket('sheets:changed', () => { loadSheetsRef.current(); }));
     c.push(onSocket('map:created', ({ map }) => setMaps((p) => p.some((m) => m.id === map.id) ? p : [...p, map])));
     c.push(onSocket('map:updated', ({ map }) => { setMaps((p) => p.map((m) => m.id === map.id ? { ...m, ...map } : m)); if (activeMap?.id === map.id) setActiveMap((p) => p ? { ...p, ...map } : p); }));
     c.push(onSocket('map:deleted', ({ mapId: did }) => { setMaps((p) => p.filter((m) => m.id !== did)); if (activeMap?.id === did) { const n = maps.find((m) => m.id !== did); setActiveMap(n || null); if (!n) { setTokens([]); setFogRegions([]); setDrawings([]); setAnnotations([]); } } }));
@@ -164,8 +178,14 @@ export default function TablePage() {
     c.push(onSocket('user:joined', ({ userId, username }) => setOnlineUsers((p) => p.some((u) => u.userId === userId) ? p : [...p, { userId, username }])));
     c.push(onSocket('user:left', ({ userId }) => setOnlineUsers((p) => p.filter((u) => u.userId !== userId))));
     c.push(onSocket('online:users', (users) => setOnlineUsers(users)));
-    c.push(onSocket('chat:message', () => { if (!showChatRef.current) setUnreadChat((n) => n + 1); }));
-    c.push(onSocket('chat:whisper', () => { if (!showChatRef.current) setUnreadChat((n) => n + 1); }));
+    c.push(onSocket('chat:message', ({ message } = {}) => {
+      // Itens 26-27: som apenas para mensagem/rolagem NOVA de outro usuario (nunca no historico)
+      if (message && message.userId !== user.id) {
+        if (!showChatRef.current) setUnreadChat((n) => n + 1);
+        if (message.type === 'dice') playDiceSound(); else playNotifySound();
+      }
+    }));
+    c.push(onSocket('chat:whisper', ({ message } = {}) => { if (!showChatRef.current) setUnreadChat((n) => n + 1); if (message && message.userId !== user.id) playNotifySound(); }));
     c.push(onSocket('chat:cleared', () => {}));
     c.push(onSocket('character:created', ({ character }) => setCharacters((p) => p.some((c) => c.id === character.id) ? p : [...p, character])));
     c.push(onSocket('character:updated', ({ character }) => { setCharacters((p) => p.map((c) => c.id === character.id ? { ...c, ...character } : c)); setOpenSheets((p) => p.map((s) => (s.character.id === character.id ? { ...s, character: { ...s.character, ...character } } : s))); setTokens((p) => p.map((t) => t.characterId === character.id ? { ...t, character } : t)); }));
@@ -386,6 +406,28 @@ export default function TablePage() {
     if (!token || !token.characterId) { alert('Este token nao tem ficha vinculada.'); return; }
     try { const c = await api.characters.getOne(tableId, token.characterId); openSheetWindow(c, 'compact'); } catch { alert('Voce nao tem acesso a esta ficha.'); }
   }
+
+  // Itens 21-25: abre uma Folha do mestre em janela flutuante
+  function openSheetDoc(sheet) {
+    sheetZRef.current += 1;
+    const key = `sheetdoc-${sheet.id}`;
+    setOpenSheets((p) => {
+      const existing = p.find((s) => s.key === key);
+      if (existing) return p.map((s) => (s.key === key ? { ...s, minimized: false, sheet, z: sheetZRef.current } : s));
+      const n = p.length;
+      const w = Math.min(520, window.innerWidth - 24);
+      const h = Math.min(560, window.innerHeight - 100);
+      return [...p, { key, sheet, kind: 'sheetdoc', x: 80 + (n % 6) * 28, y: 60 + (n % 6) * 28, w, h, minimized: false, z: sheetZRef.current }];
+    });
+  }
+
+  // Itens 28-30: desbloqueia o audio na primeira interacao (politica dos navegadores)
+  useEffect(() => {
+    const unlock = () => { unlockAudio(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+  }, []);
 
   async function handleSavePermissions(p) { try { await api.tokens.setPermissions(tableId, activeMap.id, selectedToken.id, p); await loadMapData(activeMap.id); setShowPermModal(false); setSelectedToken(null); } catch { alert('Erro ao salvar permissoes'); } }
 
@@ -657,11 +699,12 @@ export default function TablePage() {
       </div>
 
       <div className="canvas-container">
-        {isMaster && <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} isMaster={isMaster} gridVisible={gridConfig.visible} onToggleGrid={handleToggleGrid} onOpenGridSettings={() => setShowGridModal(true)} onOpenTokenDialog={() => { setTokenClickPos({ x: 100, y: 100 }); setEditingToken(null); setShowTokenModal(true); }} onEditToken={handleEditToken} onDeleteToken={handleDeleteToken} onClearDrawings={handleClearDrawings} drawColor={drawColor} onDrawColorChange={setDrawColor} />}
+        <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} isMaster={isMaster} gridVisible={gridConfig.visible} onToggleGrid={handleToggleGrid} onOpenGridSettings={() => setShowGridModal(true)} onOpenTokenDialog={() => { setTokenClickPos({ x: 100, y: 100 }); setEditingToken(null); setShowTokenModal(true); }} onEditToken={handleEditToken} onDeleteToken={handleDeleteToken} onClearDrawings={handleClearDrawings} drawColor={drawColor} onDrawColorChange={setDrawColor} onOpenSheets={() => setShowSheets(true)} />
         {(currentTool === 'fogReveal' || currentTool === 'fogHide') && isMaster && <FogControls fogMode={currentTool} fogShape={fogShape} onFogShapeChange={setFogShape} brushSize={brushSize} onBrushSizeChange={setBrushSize} onRevealAll={handleRevealAll} onHideAll={handleHideAll} />}
         <div className="tools-row">
           <DiceRoller tableId={tableId} onClose={showDice ? () => setShowDice(false) : undefined} />
           <button className={'btn btn-sm ' + (showDice ? 'btn-primary' : '')} onClick={() => setShowDice(!showDice)}>{showDice ? '▲ Dados' : '▼ Dados'}</button>
+          <button className={'btn btn-sm ' + (soundOn ? 'btn-primary' : '')} onClick={() => { const v = !soundOn; setSoundOn(v); setNotifySoundEnabled(v); unlockAudio(); }} title="Som de notificacoes (chat e rolagens)">{soundOn ? '🔊 Som' : '🔇 Som'}</button>
           <InitiativeTracker tableId={tableId} tokens={visibleTokens} members={members} isMaster={isMaster} username={user.username} />
           <Soundboard tableId={tableId} isMaster={isMaster} />
         </div>
@@ -685,10 +728,22 @@ export default function TablePage() {
       {showPermModal && selectedToken && <PermissionDialog open={showPermModal} onClose={() => { setShowPermModal(false); setSelectedToken(null); }} token={selectedToken} members={members} tableId={tableId} mapId={activeMap.id} onSave={handleSavePermissions} />}
       {showAddMemberModal && (<div className="modal-overlay" onClick={() => setShowAddMemberModal(false)}><div className="modal" onClick={(e) => e.stopPropagation()}><button className="modal-close" onClick={() => setShowAddMemberModal(false)}>×</button><h2>Adicionar Membro</h2><form onSubmit={handleAddMember}><div className="form-group"><label>Usuario (nome ou e-mail)</label><input value={addMemberForm.username} onChange={(e) => setAddMemberForm({ ...addMemberForm, username: e.target.value })} placeholder="ex: alice ou alice@email.com" required /></div><div className="form-group"><label>Cargo</label><select value={addMemberForm.role} onChange={(e) => setAddMemberForm({ ...addMemberForm, role: e.target.value })}><option value="PLAYER">Jogador</option><option value="MASTER">Mestre</option></select></div><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setShowAddMemberModal(false)}>Cancelar</button><button type="submit" className="btn btn-primary">Adicionar</button></div></form></div></div>)}
       {showCharList && <CharacterList tableId={tableId} userId={user.id} isMaster={isMaster} onClose={() => setShowCharList(false)} onSelectCharacter={handleSelectCharacter} />}
+      {showSheets && <SheetList tableId={tableId} sheets={sheets} isMaster={isMaster} onChanged={loadSheets} onClose={() => setShowSheets(false)} onOpenSheet={openSheetDoc} />}
       {openSheets.map((s) => (
-        <FloatingWindow key={s.key} title={`${s.kind === 'compact' ? 'Ficha rapida' : 'Ficha'} — ${s.character.name}`} win={s} z={s.z}
+        <FloatingWindow key={s.key} title={s.kind === 'sheetdoc' ? `Folha - ${s.sheet.title}` : `${s.kind === 'compact' ? 'Ficha rapida' : 'Ficha'} - ${s.character.name}`} win={s} z={s.z}
           onChange={(patch) => updateSheetWindow(s.key, patch)} onClose={() => closeSheetWindow(s.key)} onFocus={() => focusSheetWindow(s.key)}>
-          {s.kind === 'full'
+          {s.kind === 'sheetdoc' ? (
+            <div style={{ overflow: 'auto', height: '100%', padding: 4 }}>
+              {s.sheet.imageUrl && <img src={resolveUrl(s.sheet.imageUrl)} alt={s.sheet.title} style={{ maxWidth: '100%', borderRadius: 4, display: 'block', marginBottom: 8 }} onError={(ev) => { ev.target.style.display = 'none'; }} />}
+              {s.sheet.comments && <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5 }}>{s.sheet.comments}</div>}
+              {isMaster && s.sheet.masterNotes && (
+                <div style={{ marginTop: 10, padding: 8, background: 'rgba(233,69,96,0.08)', border: '1px dashed rgba(233,69,96,0.4)', borderRadius: 4 }}>
+                  <div style={{ fontSize: 11, color: '#e94560', marginBottom: 4 }}>Anotacoes privadas do mestre</div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{s.sheet.masterNotes}</div>
+                </div>
+              )}
+            </div>
+          ) : s.kind === 'full'
             ? <CharacterSheet character={s.character} tableId={tableId} onClose={() => closeSheetWindow(s.key)} isOwner={s.character.userId === user.id} isMaster={isMaster} userId={user.id} members={members} embedded />
             : <CompactSheet character={s.character} onClose={() => closeSheetWindow(s.key)} isMaster={isMaster} embedded onOpenFull={() => updateSheetWindow(s.key, { kind: 'full', w: Math.min(FULL_SHEET_SIZE.w, window.innerWidth - 24), h: Math.min(FULL_SHEET_SIZE.h, window.innerHeight - 100) })} />}
         </FloatingWindow>

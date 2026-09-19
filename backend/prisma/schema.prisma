@@ -37,6 +37,7 @@ model Table {
   maps        Map[]
   messages    ChatMessage[]
   characters  Character[]
+  sheets      Sheet[]
 }
 
 model TableMember {
@@ -78,6 +79,7 @@ model Character {
   system    String    @default("custom")
   kind      String    @default("pc")
   data      Json      @default("{\"hp\":{\"current\":0,\"max\":0,\"temp\":0}}")
+  visibleToPlayers Boolean @default(false)
   tokens    Token[]
   permissions CharacterPermission[]
   createdAt DateTime  @default(now())
@@ -173,12 +175,29 @@ model GridConfig {
   map           Map     @relation(fields: [mapId], references: [id], onDelete: Cascade)
   cellSize      Float   @default(40)
   physicalSize  Float   @default(1.5)
-  visible       Boolean @default(true)
+  visible    Boolean  @default(true)
   lineThickness Float   @default(1)
   lineOpacity   Float   @default(0.5)
   offsetX       Float   @default(0)
   offsetY       Float   @default(0)
   snapToGrid    Boolean @default(false)
+  distanceUnit  String  @default("m")
+}
+
+// Itens 19-24: folhas auxiliares da aventura (mestre cria; jogador ve apenas as visiveis, sem masterNotes)
+model Sheet {
+  id               String   @id @default(uuid())
+  tableId          String
+  table            Table    @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  title            String
+  imageUrl         String?
+  comments         String   @default("")
+  masterNotes      String   @default("")
+  visibleToPlayers Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tableId])
 }
 
 model FogOfWarRegion {

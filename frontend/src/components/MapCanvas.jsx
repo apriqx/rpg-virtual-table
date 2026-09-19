@@ -5,7 +5,7 @@ import { resolveUrl } from '../services/api';
 import { markerEmoji } from './tokenMarkers';
 import { resolveFieldPath } from './charFieldPaths';
 
-const TokenComponent = React.memo(function TokenComponent({ token, isSelected, isActive, isMaster, masquerade, onDragEnd, onClick, onContextMenu, onMenuOpen, snapToGrid, canMove }) {
+const TokenComponent = React.memo(function TokenComponent({ token, isSelected, isActive, isMaster, masquerade, onDragEnd, onClick, onContextMenu, onMenuOpen, snapToGrid, canMove, measureActive }) {
   const [img, setImg] = useState(null);
 
   useEffect(() => {
@@ -17,7 +17,7 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
 
   function handleDragEnd(e) { const x = e.target.x(); const y = e.target.y(); const snapped = snapToGrid(token, x, y); onDragEnd(token.id, snapped.x, snapped.y); }
   function handleClick(e) { e.cancelBubble = true; onClick(token.id, e); }
-  function handleContext(e) { e.cancelBubble = true; if (onContextMenu) onContextMenu(token, e); }
+  function handleContext(e) { e.cancelBubble = true; if (measureActive) return; if (onContextMenu) onContextMenu(token, e); }
   function handleMenu(e) { e.cancelBubble = true; if (onMenuOpen) onMenuOpen(token, e); }
 
   const isMasterLayer = token.layer === 5;
@@ -184,7 +184,8 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
   const handleMouseDown = useCallback((e) => {
     if (e.evt.button === 1 || (currentTool === 'move' && e.evt.button === 0 && e.target === e.target.getStage())) { isPanning.current = true; lastPointerPos.current = { x: e.evt.clientX, y: e.evt.clientY }; }
     if (currentTool === 'select' && e.evt.button === 0 && e.target === e.target.getStage()) { const pos = getPointerPos(e); if (pos) { marqueeMoved.current = false; setMarquee({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y }); } }
-    if (currentTool === 'measure' && isMaster && e.evt.button === 0) { const pos = getPointerPos(e); if (pos) { setMeasureStart(pos); setMeasureEnd(pos); setIsMeasuring(true); } }
+    // Itens 5-13: medir para mestre E jogador, com botao esquerdo OU direito
+    if (currentTool === 'measure' && (e.evt.button === 0 || e.evt.button === 2)) { const pos = getPointerPos(e); if (pos) { setMeasureStart(pos); setMeasureEnd(pos); setIsMeasuring(true); } }
     if (currentTool === 'draw' && isMaster && e.evt.button === 0) { const pos = getPointerPos(e); if (pos) { setIsDrawing(true); setCurrentStroke([pos]); } }
   }, [currentTool, isMaster, getPointerPos]);
 
@@ -360,17 +361,22 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
   }, [canControlToken, isMaster, onTokenSelect, openTokenMenu]);
 
   const renderToken = (token) => (
-    <TokenComponent key={token.id} token={token} isSelected={selectedTokenIds.includes(token.id)} isActive={activeTokenId === token.id} isMaster={isMaster} masquerade={masquerade} onDragEnd={handleTokenDragEnd} onClick={handleTokenClick} onContextMenu={handleTokenContextMenu} onMenuOpen={openTokenMenu} snapToGrid={snapToGrid} canMove={getCanMove(token)} />
+    <TokenComponent key={token.id} token={token} isSelected={selectedTokenIds.includes(token.id)} isActive={activeTokenId === token.id} isMaster={isMaster} masquerade={masquerade} onDragEnd={handleTokenDragEnd} onClick={handleTokenClick} onContextMenu={handleTokenContextMenu} onMenuOpen={openTokenMenu} snapToGrid={snapToGrid} canMove={getCanMove(token)} measureActive={currentTool === 'measure'} />
   );
 
+  // Itens 1-4/33-35: unidade interna em METROS (physicalSize = metros por quadrado,
+  // padrao 1,5 configuravel); exibicao em m ou km com formatacao pt-BR
   const measureDistance = useMemo(() => {
     if (!measureStart || !measureEnd) return null;
     const dx = measureEnd.x - measureStart.x; const dy = measureEnd.y - measureStart.y;
     const px = Math.sqrt(dx * dx + dy * dy);
     const cells = gridConfig.cellSize > 0 ? px / gridConfig.cellSize : 0;
-    const ft = cells * (gridConfig.physicalSize || 1.5);
-    return { px: Math.round(px), cells: cells.toFixed(1), ft: ft.toFixed(1) };
-  }, [measureStart, measureEnd, gridConfig.cellSize, gridConfig.physicalSize]);
+    const meters = cells * (gridConfig.physicalSize || 1.5);
+    const unit = gridConfig.distanceUnit === 'km' ? 'km' : 'm';
+    const value = unit === 'km' ? meters / 1000 : meters;
+    const fmt = (v, max) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: max }).format(v);
+    return { px: Math.round(px), cells: fmt(cells, 2), label: fmt(value, unit === 'km' ? 3 : 2) + ' ' + unit };
+  }, [measureStart, measureEnd, gridConfig.cellSize, gridConfig.physicalSize, gridConfig.distanceUnit]);
 
   const drawingLines = useMemo(() => {
     return (drawings || []).map((d) => {
@@ -394,7 +400,7 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
   }, [currentStroke, drawColor]);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} onContextMenu={(e) => { if (currentTool === 'measure') e.preventDefault(); }}>
       <Stage ref={stageRef} width={containerSize.width} height={containerSize.height} scaleX={stageScale} scaleY={stageScale} x={stagePos.x} y={stagePos.y} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleStageMouseLeave} onClick={handleStageClick} draggable={currentTool === 'move'} style={{ cursor: currentTool === 'move' ? 'grab' : currentTool === 'draw' ? 'crosshair' : currentTool === 'measure' ? 'crosshair' : currentTool === 'annotate' ? 'text' : currentTool === 'erase' ? 'pointer' : (currentTool === 'fogReveal' || currentTool === 'fogHide') ? 'crosshair' : 'default' }}>
         <Layer listening={false}>
           {mapImageSource ? <KonvaImage image={mapImageSource} width={map.width} height={map.height} /> : <Rect width={map.width} height={map.height} fill="#2a2a3e" />}
@@ -419,7 +425,8 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
             })}
             {tokens.filter((t) => (t.lightRadius || 0) > 0 && !masquerade).map((t) => (<Circle key={`light-${t.id}`} x={t.x + t.width / 2} y={t.y + t.height / 2} radius={t.lightRadius} fill="white" />))}
             {tokens.filter((t) => !masquerade && ((t.visionRadius || 0) > 0 || (map.darkMode && t.visible !== false))).map((t) => {
-              const pxPerFt = (gridConfig.cellSize || 50) / (gridConfig.physicalSize || 1.5);
+              // physicalSize = metros por quadrado (item 33); visao continua definida em pes
+              const pxPerFt = ((gridConfig.cellSize || 50) * 0.3048) / (gridConfig.physicalSize || 1.5);
               const hasVision = (t.visionRadius || 0) > 0;
               const r = hasVision ? t.visionRadius * pxPerFt : 6 * (gridConfig.cellSize || 50);
               return (
@@ -469,7 +476,7 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
             {measureDistance && (
               <Group>
                 <Rect x={(measureStart.x + measureEnd.x) / 2 - 50} y={(measureStart.y + measureEnd.y) / 2 - 22} width={100} height={20} fill="rgba(0,0,0,0.8)" cornerRadius={4} listening={false} />
-                <Text x={(measureStart.x + measureEnd.x) / 2} y={(measureStart.y + measureEnd.y) / 2 - 10} text={`${measureDistance.cells} cel (${measureDistance.ft}ft)`} fontSize={12} fill="#f1fa8c" align="center" width={100} listening={false} />
+                <Text x={(measureStart.x + measureEnd.x) / 2} y={(measureStart.y + measureEnd.y) / 2 - 10} text={`${measureDistance.label} (${measureDistance.cells} cel)`} fontSize={12} fill="#f1fa8c" align="center" width={140} offsetX={-20} listening={false} />
               </Group>
             )}
           </Layer>
@@ -483,7 +490,7 @@ function MapCanvas({ map, tokens, gridConfig, fogConfig: fogCfg, fogRegions, dra
             {onRollDice && (
               <button type="button" onClick={() => { setTokenMenu(null); onRollDice(); }}>🎲 Rolar dado</button>
             )}
-            {tokenMenu.token.characterId && (
+            {tokenMenu.token.characterId && tokenMenu.token.character?.kind !== 'monster' && (
               <div className="tcm-group">
                 <span className="tcm-group-label">Abrir Ficha</span>
                 <div className="tcm-group-btns">

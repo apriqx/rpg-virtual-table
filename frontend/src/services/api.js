@@ -61,4 +61,11 @@ const annotations = {
 
 const uploads = { create: (file) => { const fd = new FormData(); fd.append('image', file); return api.post('/uploads', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data); } };
 
-export default { auth, tables, maps, tokens, grid, fog, chat, characters, drawings, annotations, uploads, resolveUrl };
+const sheets = {
+  getAll: async (tableId) => { const r = await api.get(`/tables/${tableId}/sheets`); return r.data; },
+  create: async (tableId, data) => { const r = await api.post(`/tables/${tableId}/sheets`, data); return r.data; },
+  update: async (tableId, sheetId, data) => { const r = await api.put(`/tables/${tableId}/sheets/${sheetId}`, data); return r.data; },
+  remove: async (tableId, sheetId) => { const r = await api.delete(`/tables/${tableId}/sheets/${sheetId}`); return r.data; },
+};
+
+export default { auth, tables, maps, tokens, grid, fog, chat, characters, drawings, annotations, sheets, uploads, resolveUrl };

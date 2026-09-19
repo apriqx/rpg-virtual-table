@@ -25,8 +25,12 @@ async function getCharacters(req, res) {
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
     const where = isMaster ? { tableId } : {
       tableId,
+      // Itens 15/39: ficha de MONSTRO nunca aparece para jogadores
+      kind: { not: 'monster' },
       OR: [
         { userId: req.user.id },
+        // Item 16: NPC visivel quando o mestre permite
+        { visibleToPlayers: true },
         { permissions: { some: { userId: req.user.id, canView: true } } },
       ],
     };
@@ -43,9 +47,15 @@ async function getCharacter(req, res) {
     const character = await prisma.character.findUnique({ where: { id: characterId }, include: CHAR_INCLUDE });
     if (!character) return res.status(404).json({ error: 'Ficha nao encontrada' });
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
-    if (!isMaster && character.userId !== req.user.id) {
-      const perm = character.permissions.find((p) => p.userId === req.user.id);
-      if (!perm || !perm.canView) return res.status(403).json({ error: 'Sem permissao para ver esta ficha' });
+    if (!isMaster) {
+      // Item 15/39: regra absoluta - monstro inacessivel mesmo com permissao
+      if (character.kind === 'monster') return res.status(403).json({ error: 'A ficha de um monstro nao esta disponivel para jogadores' });
+      if (character.userId !== req.user.id) {
+        const perm = character.permissions.find((p) => p.userId === req.user.id);
+        // Item 16/18: NPC acessivel se o mestre marcou "visivel para jogadores"
+        const npcVisible = character.kind === 'npc' && character.visibleToPlayers === true;
+        if (!npcVisible && (!perm || !perm.canView)) return res.status(403).json({ error: 'Sem permissao para ver esta ficha' });
+      }
     }
     res.json(character);
   } catch (error) {
@@ -56,7 +66,7 @@ async function getCharacter(req, res) {
 async function createCharacter(req, res) {
   try {
     const { tableId } = req.params;
-    const { name, system, data, kind, userId } = req.body;
+    const { name, system, data, kind, userId, visibleToPlayers } = req.body;
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
     if (kind !== undefined && !KINDS.includes(kind)) return res.status(400).json({ error: 'Tipo invalido (pc, npc ou monster)' });
     const finalKind = KINDS.includes(kind) ? kind : 'pc';
@@ -67,6 +77,7 @@ async function createCharacter(req, res) {
         tableId,
         userId: ownerId,
         name: name || 'Sem nome',
+        visibleToPlayers: finalKind === 'npc' && visibleToPlayers === true,
         system: system || 'custom',
         kind: finalKind,
         data: data || DEFAULT_DATA,
@@ -83,10 +94,12 @@ async function createCharacter(req, res) {
 async function updateCharacter(req, res) {
   try {
     const { characterId, tableId } = req.params;
-    const { name, system, data, kind } = req.body;
+    const { name, system, data, kind, visibleToPlayers } = req.body;
     const existing = await prisma.character.findUnique({ where: { id: characterId }, include: { permissions: true } });
     if (!existing) return res.status(404).json({ error: 'Ficha nao encontrada' });
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
+    // Item 15/39: monstro nunca e editado por jogador
+    if (!isMaster && existing.kind === 'monster') return res.status(403).json({ error: 'A ficha de um monstro nao pode ser editada por jogadores' });
     let allowed = isMaster || existing.userId === req.user.id;
     if (!allowed) {
       const perm = existing.permissions.find((p) => p.userId === req.user.id);
@@ -98,6 +111,8 @@ async function updateCharacter(req, res) {
     if (system !== undefined) updateData.system = system;
     if (data !== undefined) updateData.data = data;
     if (kind !== undefined && KINDS.includes(kind) && isMaster) updateData.kind = kind;
+    // Item 17: flag "visivel para jogadores" (mestre)
+    if (visibleToPlayers !== undefined && isMaster) updateData.visibleToPlayers = visibleToPlayers === true;
     const character = await prisma.character.update({ where: { id: characterId }, data: updateData, include: CHAR_INCLUDE });
     broadcastToTable(tableId, 'character:updated', { character });
     res.json(character);

@@ -292,26 +292,84 @@ async function main() {
   ok('player sem permissao nao edita NPC -> 403', r.status === 403);
   r = await req('GET', `/tables/${tid}/characters/${npcId}`, { token: pTok });
   ok('player sem permissao nao abre NPC -> 403', r.status === 403);
+  // ---- R11 itens 1-4: bloqueio absoluto de monstros (mesmo com permissao) ----
   r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: pTok, body: { permissions: [] } });
   ok('player nao define permissoes -> 403', r.status === 403);
-  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canControl: false }] } });
-  ok('mestre define permissoes -> 200', r.status === 200 && Array.isArray(r.data.permissions) && r.data.permissions.some((p) => p.userId === pUser.id && p.canView && !p.canControl));
+  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canControl: true }] } });
+  ok('mestre concede permissao em monstro -> 200', r.status === 200 && Array.isArray(r.data.permissions) && r.data.permissions.some((p) => p.userId === pUser.id && p.canView && p.canControl));
   r = await req('GET', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok });
   ok('GET permissoes lista grants', r.status === 200 && r.data.some((p) => p.userId === pUser.id && p.canView));
-  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
-  ok('monstro visivel apos canView', r.data.some((c) => c.id === monId && Array.isArray(c.permissions) && c.permissions.some((p) => p.userId === pUser.id && p.canView)));
   r = await req('GET', `/tables/${tid}/characters/${monId}`, { token: pTok });
-  ok('player abre monstro compartilhado -> 200', r.status === 200 && r.data.name === 'Goblin Batedor');
+  ok('player abre monstro -> 403 (bloqueio absoluto, item 1)', r.status === 403);
   r = await req('PUT', `/tables/${tid}/characters/${monId}`, { token: pTok, body: { name: 'TENTATIVA' } });
-  ok('canView sem canControl nao edita -> 403', r.status === 403);
-  r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [{ userId: pUser.id, canView: true, canControl: true }] } });
-  ok('mestre concede canControl', r.status === 200);
-  r = await req('PUT', `/tables/${tid}/characters/${monId}`, { token: pTok, body: { data: { hp: { current: 3, max: 7, temp: 0 } } } });
-  ok('canControl permite player editar HP', r.status === 200 && r.data.data.hp.current === 3);
+  ok('player nao edita monstro mesmo com canControl -> 403 (item 2)', r.status === 403);
+  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
+  ok('monstro nao lista para player mesmo com permissao (item 3)', !r.data.some((c) => c.id === monId));
   r = await req('PUT', `/tables/${tid}/characters/${monId}/permissions`, { token: mTok, body: { permissions: [] } });
   ok('revogar permissoes -> 200 vazio', r.status === 200 && r.data.permissions.length === 0);
-  r = await req('GET', `/tables/${tid}/characters`, { token: pTok });
-  ok('monstro invisivel novamente apos revogar', !r.data.some((c) => c.id === monId));
+  // ---- R11 itens 15-18: NPC visivel para jogadores ----
+  r = await req('PUT', `/tables/${tid}/characters/${npcId}`, { token: mTok, body: { visibleToPlayers: true } });
+  ok('mestre marca NPC visivel -> 200 true (item 15)', r.status === 200 && r.data.visibleToPlayers === true);
+  r = await req('GET', `/tables/${tid}/characters/${npcId}`, { token: pTok });
+  ok('player abre NPC visivel -> 200 (item 16)', r.status === 200 && r.data.name === 'Taverneiro');
+  r = await req('PUT', `/tables/${tid}/characters/${npcId}`, { token: pTok, body: { name: 'HACK2' } });
+  ok('player sem perm ainda nao edita NPC -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${npcId}`, { token: mTok, body: { visibleToPlayers: false } });
+  ok('mestre desmarca NPC visivel (item 18)', r.status === 200 && r.data.visibleToPlayers === false);
+  r = await req('GET', `/tables/${tid}/characters/${npcId}`, { token: pTok });
+  ok('NPC invisivel de novo -> 403', r.status === 403);
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'Guarda', kind: 'npc', visibleToPlayers: true } });
+  ok('mestre cria NPC ja visivel -> 201 true', r.status === 201 && r.data.visibleToPlayers === true);
+  const npcVisId = r.data.id;
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'Dragao Chefe', kind: 'monster', visibleToPlayers: true } });
+  ok('monstro criado com flag vira invisivel -> false', r.status === 201 && r.data.visibleToPlayers === false);
+  r = await req('PUT', `/tables/${tid}/characters/${pCharId}`, { token: pTok, body: { visibleToPlayers: true } });
+  ok('player nao marca o proprio PC visivel', r.status === 200 && r.data.visibleToPlayers === false);
+  // ---- R11 itens 9-14: sanitizacao do character de monstro nos tokens ----
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Goblin Batedor', x: 150, y: 150, characterId: monId } });
+  ok('mestre cria token de monstro -> 201', r.status === 201 && r.data.token.characterId === monId);
+  const monTokId = r.data.token.id;
+  r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: pTok });
+  const monTok = (r.data || []).find((t) => t.id === monTokId);
+  ok('token de monstro sanitizado p/ player: data vazio e kind monster (item 9)', Boolean(monTok) && monTok.character && monTok.character.kind === 'monster' && monTok.character.data && Object.keys(monTok.character.data).length === 0 && monTok.character.visibleToPlayers === false);
+  r = await req('GET', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok });
+  const monTokM = (r.data || []).find((t) => t.id === monTokId);
+  ok('mestre ve o character completo do monstro no token', Boolean(monTokM) && monTokM.character && monTokM.character.kind === 'monster');
+  // ---- R11 itens 3/32-35: distancia em metros + unidade m/km ----
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/grid`, { token: mTok, body: { distanceUnit: 'km', cellSize: 50, physicalSize: 1.5 } });
+  ok('mestre define unidade km -> 200 km (item 32)', r.status === 200 && r.data.gridConfig.distanceUnit === 'km');
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/grid`, { token: pTok, body: { distanceUnit: 'km' } });
+  ok('player nao define config de grade -> 403', r.status === 403);
+  r = await req('GET', `/tables/${tid}/maps/${mid}/grid`, { token: pTok });
+  ok('player le distanceUnit km (item 35)', r.status === 200 && r.data.gridConfig.distanceUnit === 'km');
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/grid`, { token: mTok, body: { distanceUnit: 'ft' } });
+  ok('unidade invalida cai para m', r.status === 200 && r.data.gridConfig.distanceUnit === 'm');
+  // ---- R11 itens 14-25: folhas do mestre ----
+  r = await req('GET', `/tables/${tid}/sheets`, { token: pTok });
+  ok('player lista folhas vazia', r.status === 200 && r.data.length === 0);
+  r = await req('POST', `/tables/${tid}/sheets`, { token: pTok, body: { title: 'Hack' } });
+  ok('player nao cria folha -> 403 (item 19)', r.status === 403);
+  r = await req('POST', `/tables/${tid}/sheets`, { token: mTok, body: { title: 'Mapa da Cidade', comments: 'Ponto de encontro na fonte', masterNotes: 'Embaixo da fonte ha um tunel', visibleToPlayers: false } });
+  ok('mestre cria folha -> 201 (item 21)', r.status === 201 && r.data.title === 'Mapa da Cidade' && r.data.masterNotes === 'Embaixo da fonte ha um tunel');
+  const sheetPrivId = r.data.id;
+  r = await req('POST', `/tables/${tid}/sheets`, { token: mTok, body: { title: 'X'.repeat(200), imageUrl: 'javascript:alert(1)', comments: 'c', visibleToPlayers: true } });
+  ok('folha sanitizada: titulo truncado 120 e url invalida -> null (item 24)', r.status === 201 && r.data.title.length === 120 && r.data.imageUrl === null);
+  const sheetPubId = r.data.id;
+  r = await req('GET', `/tables/${tid}/sheets`, { token: pTok });
+  ok('player ve apenas a folha visivel (item 23)', r.status === 200 && r.data.some((s) => s.id === sheetPubId) && !r.data.some((s) => s.id === sheetPrivId));
+  ok('folha enviada ao player NAO tem masterNotes (item 24)', r.data.every((s) => !('masterNotes' in s)));
+  r = await req('PUT', `/tables/${tid}/sheets/${sheetPubId}`, { token: pTok, body: { title: 'Hack' } });
+  ok('player nao edita folha -> 403', r.status === 403);
+  r = await req('DELETE', `/tables/${tid}/sheets/${sheetPubId}`, { token: pTok });
+  ok('player nao exclui folha -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/sheets/${sheetPrivId}`, { token: mTok, body: { visibleToPlayers: true } });
+  ok('mestre torna folha visivel', r.status === 200 && r.data.visibleToPlayers === true);
+  r = await req('GET', `/tables/${tid}/sheets`, { token: pTok });
+  ok('player agora ve as duas folhas', r.status === 200 && r.data.length === 2);
+  r = await req('DELETE', `/tables/${tid}/sheets/${sheetPrivId}`, { token: mTok });
+  ok('mestre exclui folha', r.status === 200);
+  r = await req('DELETE', `/tables/${tid}/sheets/${sheetPubId}`, { token: mTok });
+  ok('mestre exclui folha 2', r.status === 200);
 
   // ---- chat ----
   r = await req('POST', `/tables/${tid}/chat`, { token: pTok, body: { type: 'player', text: 'ola mesa' } });
@@ -342,8 +400,11 @@ async function main() {
   // ---- backup ----
   r = await req('GET', `/tables/${tid}/export`, { token: pTok });
   ok('player nao exporta backup -> 403', r.status === 403);
+  r = await req('POST', `/tables/${tid}/sheets`, { token: mTok, body: { title: 'Folha Backup', visibleToPlayers: true } });
+  ok('mestre cria folha para backup', r.status === 201);
   r = await req('GET', `/tables/${tid}/export`, { token: mTok });
   ok('export backup -> 200 v1', r.status === 200 && r.data.version === 1 && Array.isArray(r.data.maps));
+  ok('export inclui folhas e kind/visibleToPlayers de fichas (item 25)', Array.isArray(r.data.sheets) && r.data.sheets.some((s) => s.title === 'Folha Backup') && (r.data.characters || []).every((c) => 'kind' in c && 'visibleToPlayers' in c));
   const bkMap = (r.data.maps || []).find((m) => Array.isArray(m.tokens) && m.tokens.some((t) => t.snapToGrid !== undefined));
   ok('export inclui campos novos de token e darkMode', Boolean(bkMap) && typeof bkMap.darkMode === 'boolean' && bkMap.tokens.every((t) => ['snapToGrid', 'visionRadius', 'displayName', 'showName', 'opacity', 'bars', 'statusMarkers'].every((k) => k in t)));
   r = await req('POST', `/tables/${tid}/import`, { token: mTok, body: { version: 2, maps: [] } });

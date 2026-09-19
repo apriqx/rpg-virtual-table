@@ -14,6 +14,7 @@ async function exportTable(req, res) {
     const table = await prisma.table.findUnique({ where: { id: tableId }, select: { name: true, masquerade: true } });
     if (!table) return res.status(404).json({ error: 'Mesa nao encontrada' });
     const characters = await prisma.character.findMany({ where: { tableId }, include: { user: { select: { username: true } } }, orderBy: { createdAt: 'asc' } });
+    const sheets = await prisma.sheet.findMany({ where: { tableId }, orderBy: { createdAt: 'asc' } });
     const maps = await prisma.map.findMany({
       where: { tableId },
       include: { gridConfig: true, fogConfig: true, fogRegions: true, drawings: true, annotations: true, tokens: { include: { permissions: { include: { user: { select: { username: true } } } }, owner: { select: { username: true } } } } },
@@ -24,7 +25,8 @@ async function exportTable(req, res) {
       version: 1,
       exportedAt: new Date().toISOString(),
       table: { name: table.name, masquerade: table.masquerade },
-      characters: characters.map((c) => ({ name: c.name, system: c.system, data: c.data, ownerUsername: c.user ? c.user.username : null })),
+      characters: characters.map((c) => ({ name: c.name, system: c.system, data: c.data, visibleToPlayers: c.visibleToPlayers === true, kind: c.kind, ownerUsername: c.user ? c.user.username : null })),
+      sheets: sheets.map((s) => ({ title: s.title, imageUrl: s.imageUrl, comments: s.comments, masterNotes: s.masterNotes, visibleToPlayers: s.visibleToPlayers })),
       maps: maps.map((m) => ({
         ...pick(m, MAP_COLUMNS),
         gridConfig: m.gridConfig ? pick(m.gridConfig, GRID_COLUMNS) : null,
@@ -58,8 +60,14 @@ async function importTable(req, res) {
       const charIds = [];
       for (const c of (body.characters || [])) {
         if (!c || !c.name) continue;
-        const created = await tx.character.create({ data: { tableId, name: clampStr(c.name, 100), system: c.system || 'custom', data: c.data ?? {}, userId: uid(c.ownerUsername) } });
+        const created = await tx.character.create({ data: { tableId, name: clampStr(c.name, 100), system: c.system || 'custom', kind: ['pc', 'npc', 'monster'].includes(c.kind) ? c.kind : 'pc', data: c.data ?? {}, visibleToPlayers: c.visibleToPlayers === true, userId: uid(c.ownerUsername) } });
         charIds.push(created.id);
+      }
+      let sheetCount = 0;
+      for (const s of (body.sheets || [])) {
+        if (!s || !s.title) continue;
+        await tx.sheet.create({ data: { tableId, title: clampStr(s.title, 120), imageUrl: typeof s.imageUrl === 'string' && /^https?:\/\//i.test(s.imageUrl.trim()) ? s.imageUrl.trim().slice(0, 500) : null, comments: typeof s.comments === 'string' ? s.comments.slice(0, 20000) : '', masterNotes: typeof s.masterNotes === 'string' ? s.masterNotes.slice(0, 20000) : '', visibleToPlayers: s.visibleToPlayers === true } });
+        sheetCount += 1;
       }
       let mapCount = 0; let tokenCount = 0;
       for (const m of body.maps) {

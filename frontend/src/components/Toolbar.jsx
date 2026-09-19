@@ -1,14 +1,15 @@
-export default function Toolbar({ currentTool, onToolChange, isMaster, gridVisible, onToggleGrid, onOpenGridSettings, onOpenTokenDialog, onEditToken, onDeleteToken, onClearDrawings, drawColor, onDrawColorChange }) {
+// Itens 5-7/36: barra de ferramentas - jogador tem Selecionar, Mover e Medir
+export default function Toolbar({ currentTool, onToolChange, isMaster, gridVisible, onToggleGrid, onOpenGridSettings, onOpenTokenDialog, onEditToken, onDeleteToken, onClearDrawings, drawColor, onDrawColorChange, onOpenSheets }) {
   const tools = [
     { id: 'select', label: 'Selecionar' },
     { id: 'move', label: 'Mover' },
+    { id: 'measure', label: 'Medir' },
   ];
 
   const masterTools = [
     { id: 'addToken', label: '+ Token' },
     { id: 'editToken', label: 'Editar' },
     { id: 'deleteToken', label: 'Excluir Token' },
-    { id: 'measure', label: 'Medir' },
     { id: 'draw', label: 'Desenhar' },
     { id: 'erase', label: 'Borracha' },
     { id: 'annotate', label: 'Texto' },
@@ -23,15 +24,18 @@ export default function Toolbar({ currentTool, onToolChange, isMaster, gridVisib
     if (toolId === 'deleteToken') { onDeleteToken?.(); return; }
     if (toolId === 'addToken') { onOpenTokenDialog?.(); return; }
     if (toolId === 'editToken') { onEditToken?.(); return; }
-    onToolChange(toolId);
+    // "Mover" usa a mesma ferramenta de selecao: o token e arrastado no mapa (itens 6/37)
+    const target = toolId === 'move' ? 'select' : toolId;
+    onToolChange(target);
   }
 
   return (
     <div className="toolbar">
       <div className="tool-group">
         {tools.map((t) => (
-          <button key={t.id} className={currentTool === t.id ? 'active' : ''} onClick={() => handleToolClick(t.id)}>{t.label}</button>
+          <button key={t.id} className={currentTool === t.id || (t.id === 'move' && currentTool === 'select') ? 'active' : ''} onClick={() => handleToolClick(t.id)}>{t.label}</button>
         ))}
+        <button onClick={() => onOpenSheets?.()}>Folhas</button>
       </div>
       {isMaster && (
         <div className="tool-group">
@@ -56,7 +60,7 @@ export default function Toolbar({ currentTool, onToolChange, isMaster, gridVisib
       {isMaster && (
         <div className="tool-group">
           <button className={gridVisible ? 'active' : ''} onClick={onToggleGrid}>Grade</button>
-          <button onClick={onOpenGridSettings}>Config. Grade</button>
+          <button onClick={onOpenGridSettings}>Config. Mapa</button>
         </div>
       )}
     </div>

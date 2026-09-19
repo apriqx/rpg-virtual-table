@@ -7,9 +7,9 @@ async function getGridConfig(req, res) {
     const config = await prisma.gridConfig.findUnique({ where: { mapId } });
     if (!config) {
       return res.json({ gridConfig: {
-        cellSize: 40, physicalSize: 1.5, visible: true,
+        cellSize: 40, physicalSize: 1.5, visible: true, distanceUnit: 'm',
         lineThickness: 1, lineOpacity: 0.5,
-        offsetX: 0, offsetY: 0, snapToGrid: false,
+        offsetX: 0, offsetY: 0, snapToGrid: false, distanceUnit: 'm',
       }});
     }
     res.json({ gridConfig: config });
@@ -21,7 +21,7 @@ async function getGridConfig(req, res) {
 async function updateGridConfig(req, res) {
   try {
     const { mapId, tableId } = req.params;
-    const { cellSize, physicalSize, visible, lineThickness, lineOpacity, offsetX, offsetY, snapToGrid } = req.body;
+    const { cellSize, physicalSize, visible, lineThickness, lineOpacity, offsetX, offsetY, snapToGrid, distanceUnit } = req.body; const unit = distanceUnit === 'km' ? 'km' : 'm';
     const config = await prisma.gridConfig.upsert({
       where: { mapId },
       update: {
@@ -33,6 +33,7 @@ async function updateGridConfig(req, res) {
         offsetX: offsetX !== undefined ? parseFloat(offsetX) : undefined,
         offsetY: offsetY !== undefined ? parseFloat(offsetY) : undefined,
         snapToGrid: snapToGrid !== undefined ? snapToGrid : undefined,
+        distanceUnit: unit,
       },
       create: {
         mapId,
@@ -44,6 +45,7 @@ async function updateGridConfig(req, res) {
         offsetX: parseFloat(offsetX) || 0,
         offsetY: parseFloat(offsetY) || 0,
         snapToGrid: snapToGrid !== undefined ? snapToGrid : false,
+        distanceUnit: unit,
       },
     });
     broadcastToTable(tableId, 'grid:updated', { mapId, gridConfig: config });

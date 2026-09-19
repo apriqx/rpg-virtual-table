@@ -10,6 +10,8 @@ export default function GridSettings({ open, onClose, config, fogConfig, onSave 
   const [offsetX, setOffsetX] = useState(config.offsetX);
   const [offsetY, setOffsetY] = useState(config.offsetY);
   const [snapToGrid, setSnapToGrid] = useState(config.snapToGrid);
+  // Itens 3/32-35: escala do grid em metros + unidade de exibicao do medidor
+  const [distanceUnit, setDistanceUnit] = useState(config.distanceUnit === 'km' ? 'km' : 'm');
 
   const [fogEnabled, setFogEnabled] = useState(fogConfig ? fogConfig.enabled !== false : true);
   const [fogColor, setFogColor] = useState((fogConfig && fogConfig.color) || '#000000');
@@ -30,6 +32,7 @@ export default function GridSettings({ open, onClose, config, fogConfig, onSave 
       offsetX,
       offsetY,
       snapToGrid,
+      distanceUnit,
     }, {
       enabled: fogEnabled,
       color: fogColor,
@@ -50,8 +53,22 @@ export default function GridSettings({ open, onClose, config, fogConfig, onSave 
             <input type="number" value={cellSize} onChange={(e) => setCellSize(Number(e.target.value))} min={10} />
           </div>
           <div className="form-group">
-            <label>Tamanho fisico (cm)</label>
+            <label>Tamanho fisico da celula (m)</label>
             <input type="number" value={physicalSize} onChange={(e) => setPhysicalSize(Number(e.target.value))} min={0.1} step={0.1} />
+          </div>
+
+          {/* Itens 3/31/32: secao Distancia */}
+          <h3 className="gs-section-title">Distância</h3>
+          <div className="form-group">
+            <label>Escala: cada quadrado = {physicalSize || 1.5} m</label>
+            <input type="range" min="0.5" max="5" step="0.5" value={physicalSize} onChange={(e) => setPhysicalSize(Number(e.target.value))} />
+          </div>
+          <div className="form-group">
+            <label>Unidade do medidor</label>
+            <select value={distanceUnit} onChange={(e) => setDistanceUnit(e.target.value)}>
+              <option value="m">Metro (m)</option>
+              <option value="km">Quilômetro (km)</option>
+            </select>
           </div>
           <div className="form-group">
             <label>
