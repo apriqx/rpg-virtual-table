@@ -165,13 +165,14 @@ export default function Dnd5eSheetBody({ editData, setField, editing, tableId, o
               <div key={i} className="dnd-attack-row">
                 <input placeholder="Nome" value={at.name || ''} disabled={dis} onChange={(e) => setAttack(i, 'name', e.target.value)} />
                 <input placeholder="+5" value={at.bonus || ''} disabled={dis} onChange={(e) => setAttack(i, 'bonus', e.target.value)} />
-                <input placeholder="1d8+3 cortante" value={at.damage || ''} disabled={dis} onChange={(e) => setAttack(i, 'damage', e.target.value)} />
+                <input placeholder="1d8+4" value={at.damage || ''} disabled={dis} onChange={(e) => setAttack(i, 'damage', e.target.value)} />
+                <input placeholder="Cortante" value={at.damageType || ''} disabled={dis} onChange={(e) => setAttack(i, 'damageType', e.target.value)} style={{ flex: 0.7 }} title="Tipo de dano" />
                 {/^[+-]?\d+$/.test(String(at.bonus || '').trim()) && rollBtn('1d20' + (String(at.bonus).trim().startsWith('+') || String(at.bonus).trim().startsWith('-') ? String(at.bonus).trim() : '+' + String(at.bonus).trim()), 'Ataque: ' + (at.name || ''))}
                 {(String(at.damage || '').match(/^\d*d\d+(?:\s*[+-]\s*\d+)?/i) || [])[0] && rollBtn(String(at.damage).match(/^\d*d\d+(?:\s*[+-]\s*\d+)?/i)[0].replace(/\s+/g, ''), 'Dano: ' + (at.name || ''), '💥')}
                 {editing && <button type="button" className="btn btn-sm btn-danger" onClick={() => setField('attacks', attacks.filter((_, j) => j !== i))}>×</button>}
               </div>
             ))}
-            {editing && <button type="button" className="btn btn-sm" onClick={() => setField('attacks', [...attacks, { name: '', bonus: '', damage: '' }])}>+ Ataque</button>}
+            {editing && <button type="button" className="btn btn-sm" onClick={() => setField('attacks', [...attacks, { name: '', bonus: '', damage: '', damageType: '' }])}>+ Ataque</button>}
           </div>
           <div className="dnd-spells">
             <h4>Conjuração</h4>

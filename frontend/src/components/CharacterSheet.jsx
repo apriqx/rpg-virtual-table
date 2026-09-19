@@ -8,6 +8,8 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
   const [editData, setEditData] = useState(character.data || {});
   const [saving, setSaving] = useState(false);
   const [uploadingPortrait, setUploadingPortrait] = useState(false);
+  const [portraitUrl, setPortraitUrl] = useState('');
+  const [portraitUrlError, setPortraitUrlError] = useState('');
   const [showPerms, setShowPerms] = useState(false);
   const [permSel, setPermSel] = useState(() => new Set());
   const [permCtrl, setPermCtrl] = useState(() => new Set());
@@ -114,6 +116,20 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
     setUploadingPortrait(false);
   }
 
+  // Item 52: valida a URL e tenta carregar a imagem antes de aplicar
+  function loadPortraitUrl() {
+    const raw = portraitUrl.trim();
+    if (!raw) return;
+    let url;
+    try { url = new URL(raw); } catch { setPortraitUrlError('URL inválida. Use o formato https://...'); return; }
+    if (!/^https?:$/.test(url.protocol)) { setPortraitUrlError('A URL deve começar com http:// ou https://'); return; }
+    setPortraitUrlError('');
+    const img = new Image();
+    img.onload = () => { setField('portrait', raw); setPortraitUrl(''); };
+    img.onerror = () => setPortraitUrlError('Não foi possível carregar uma imagem nessa URL.');
+    img.src = raw;
+  }
+
   const modValue = (path, delta) => {
     const d = { ...editData };
     const parts = path.split('.');
@@ -144,8 +160,8 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
               : <span className="char-portrait-empty">?</span>}
           </div>
           <h2 style={{ flex: 1 }}>{character.name}</h2>
-          {isMaster && (
-            <button className="btn btn-sm btn-secondary" title="Quem pode ver/controlar esta ficha" onClick={openPerms}>👥 Permissoes</button>
+          {(isMaster || isOwner) && (
+            <button className="btn btn-sm btn-secondary" title="Compartilhar esta ficha com outros jogadores" onClick={openPerms}>👥 Compartilhar</button>
           )}
           {canControl && !editing && (
             <button className="btn btn-sm btn-primary" onClick={startEdit}>Editar</button>
@@ -161,8 +177,11 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
           <div className="char-portrait-upload">
             <span>{uploadingPortrait ? 'Enviando retrato...' : 'Retrato:'}</span>
             <input type="file" accept="image/*" onChange={handlePortraitChange} disabled={uploadingPortrait} />
+            <input type="url" placeholder="URL da imagem (https://...)" value={portraitUrl} onChange={(e) => { setPortraitUrl(e.target.value); setPortraitUrlError(''); }} style={{ flex: 1, minWidth: 170 }} />
+            <button type="button" className="btn btn-sm" onClick={loadPortraitUrl} disabled={!portraitUrl.trim()}>Carregar imagem</button>
           </div>
         )}
+        {editing && portraitUrlError && <p style={{ color: '#ff5555', fontSize: 12, margin: '2px 0 0 14px' }}>{portraitUrlError}</p>}
 
         {character.system === 'dnd5e' ? (
           <Dnd5eSheetBody editData={editData} setField={setField} editing={editing} tableId={tableId} onQuickHp={canControl ? quickHp : undefined} onShortRest={canControl ? shortRest : undefined} onLongRest={canControl ? longRest : undefined} />
@@ -220,7 +239,7 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
               <button className="modal-close" onClick={() => setShowPerms(false)}>×</button>
               <h2>Permissoes da ficha</h2>
-              <p style={{ color: '#aaa', fontSize: 12 }}>Marque quem pode ver a ficha. Quem tem "controlar" tambem edita valores (HP, descansos) e rola.</p>
+              <p style={{ color: '#aaa', fontSize: 12 }}>Compartilhamento: "ver" consulta a ficha; "editar" também permite alterar valores (PV, descansos) e rolar. O dono e o mestre sempre mantêm o controle.</p>
               {(members || []).filter((mm) => mm.role !== 'MASTER').map((mm) => {
                 const mu = mm.user || mm;
                 const uid = mm.userId || mu.id;
@@ -228,7 +247,7 @@ export default function CharacterSheet({ character, tableId, onClose, isOwner, i
                   <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0' }}>
                     <span style={{ flex: 1 }}>{mu.username}</span>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                      <input type="checkbox" checked={permCtrl.has(uid)} onChange={() => setPermCtrl((p) => { const n = new Set(p); if (n.has(uid)) { n.delete(uid); } else { n.add(uid); } return n; })} /> controlar
+                       <input type="checkbox" checked={permCtrl.has(uid)} onChange={() => setPermCtrl((p) => { const n = new Set(p); if (n.has(uid)) { n.delete(uid); } else { n.add(uid); } return n; })} /> editar
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                       <input type="checkbox" checked={permSel.has(uid) || permCtrl.has(uid)} onChange={() => setPermSel((p) => { const n = new Set(p); if (n.has(uid)) { n.delete(uid); } else { n.add(uid); } return n; })} /> ver

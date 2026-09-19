@@ -212,6 +212,54 @@ async function main() {
   r = await req('DELETE', `/tables/${tid}/characters/${charId}`, { token: pTok });
   ok('jogador nao exclui ficha alheia -> 403', r.status === 403);
 
+  // ---- compartilhamento de ficha entre jogadores (itens 47-50) ----
+  const sTok = await login('spy@test.com');
+  r = await req('GET', '/auth/me', { token: sTok });
+  const spyId = r.data.user.id;
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'Arthan', system: 'dnd5e', kind: 'pc', userId: pUser.id, data: { level: 5, hp: { current: 40, max: 50, temp: 0 }, combat: { ac: 16, speed: 30 } } } });
+  ok('mestre cria pc com dono player -> 201', r.status === 201 && r.data.userId === pUser.id);
+  const sharedCharId = r.data.id;
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}/permissions`, { token: sTok, body: { permissions: [] } });
+  ok('fora do compartilhamento nao gerencia permissoes -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}/permissions`, { token: pTok, body: { permissions: [{ userId: spyId, canView: true, canControl: true }] } });
+  ok('dono da ficha compartilha com outro jogador -> 200', r.status === 200 && (r.data.permissions || []).some((p) => p.userId === spyId && p.canView && p.canControl));
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}/permissions`, { token: mTok, body: { permissions: [{ userId: spyId, canView: true, canControl: true }] } });
+  ok('mestre tambem compartilha a ficha -> 200', r.status === 200);
+  r = await req('GET', `/tables/${tid}/characters/${sharedCharId}`, { token: sTok });
+  ok('compartilhada visualiza ficha alheia -> 200', r.status === 200 && r.data.name === 'Arthan');
+  r = await req('GET', `/tables/${tid}/characters`, { token: sTok });
+  ok('compartilhada aparece na lista do espião', r.status === 200 && (r.data.characters || r.data).some((c) => c.id === sharedCharId));
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}`, { token: sTok, body: { data: { level: 5, hp: { current: 32, max: 50, temp: 0 }, combat: { ac: 16, speed: 30 } } } });
+  ok('compartilhada com editar altera dados -> 200', r.status === 200);
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}/permissions`, { token: sTok, body: { permissions: [{ userId: spyId, canView: true, canControl: true }] } });
+  ok('quem recebeu editar nao gerencia compartilhamento -> 403', r.status === 403);
+  r = await req('DELETE', `/tables/${tid}/characters/${sharedCharId}`, { token: sTok });
+  ok('compartilhada nao exclui ficha -> 403', r.status === 403);
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}/permissions`, { token: pTok, body: { permissions: [{ userId: spyId, canView: true, canControl: false }] } });
+  ok('dono muda permissao para apenas ver -> 200', r.status === 200 && (r.data.permissions || []).some((p) => p.userId === spyId && p.canView && !p.canControl));
+  r = await req('PUT', `/tables/${tid}/characters/${sharedCharId}`, { token: sTok, body: { data: { level: 5, hp: { current: 1, max: 50, temp: 0 }, combat: { ac: 16, speed: 30 } } } });
+  ok('com apenas ver nao altera dados -> 403', r.status === 403);
+  r = await req('GET', `/tables/${tid}/characters/${sharedCharId}`, { token: sTok });
+  ok('com apenas ver ainda consulta -> 200', r.status === 200);
+  r = await req('DELETE', `/tables/${tid}/characters/${sharedCharId}`, { token: mTok });
+  ok('limpa ficha compartilhada -> 200', r.status === 200);
+
+  // ---- barras de token vinculadas a campos da ficha (itens 54-58) ----
+  r = await req('POST', `/tables/${tid}/characters`, { token: mTok, body: { name: 'BarSrc', system: 'dnd5e', data: { hp: { current: 32, max: 50, temp: 0 }, combat: { ac: 16, speed: 30 } } } });
+  const barCharId = r.data.id;
+  r = await req('POST', `/tables/${tid}/maps/${mid}/tokens`, { token: mTok, body: { name: 'Vinculado', x: 60, y: 60, characterId: barCharId, bars: [
+    { label: 'PV', visible: true, color: '#50fa7b', current: 0, max: 0, valuePath: 'hp.current', maxPath: 'hp.max' },
+    { label: 'CA', visible: true, color: '#8be9fd', current: 0, max: 0, valuePath: 'combat.ac', maxPath: null },
+  ] } });
+  ok('cria token com barras vinculadas -> 201', r.status === 201 && r.data.token.bars.some((b) => b.valuePath === 'hp.current' && b.maxPath === 'hp.max') && r.data.token.bars.some((b) => b.valuePath === 'combat.ac' && !b.maxPath));
+  const barTokId = r.data.token.id;
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${barTokId}`, { token: mTok, body: { bars: [{ label: 'PV', visible: true, color: '#50fa7b', current: 10, max: 20, valuePath: null, maxPath: null }] } });
+  ok('remove vinculo da barra volta a manual -> 200', r.status === 200 && (r.data.bars || (r.data.token || {}).bars)[0].valuePath === null && (r.data.bars || (r.data.token || {}).bars)[0].current === 10);
+  r = await req('PUT', `/tables/${tid}/maps/${mid}/tokens/${barTokId}`, { token: pTok, body: { name: 'X', bars: [{ label: 'PV', visible: true, color: '#fff', current: 0, max: 0, valuePath: 'hp.max', maxPath: null }] } });
+  ok('player nao altera barras sem permissao -> 403', r.status === 403);
+  await req('DELETE', `/tables/${tid}/maps/${mid}/tokens/${barTokId}`, { token: mTok });
+  await req('DELETE', `/tables/${tid}/characters/${barCharId}`, { token: mTok });
+
   // ---- fichas: kinds (pc/npc/monster) + permissoes ----
   r = await req('POST', `/tables/${tid}/characters`, { token: pTok, body: { name: 'NPC Roubado', kind: 'npc' } });
   ok('player nao cria NPC -> 403', r.status === 403);

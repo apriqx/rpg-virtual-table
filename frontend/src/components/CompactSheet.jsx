@@ -52,7 +52,7 @@ export default function CompactSheet({ character, onClose, onOpenFull, isMaster 
             <div key={i} className="cs-attack">
               <span className="cs-attack-name">{a.name || '—'}</span>
               <span className="cs-attack-bonus">{a.bonus ? fmtMod(parseInt(a.bonus, 10) || 0) : ''}</span>
-              <span className="cs-attack-damage">{a.damage || ''}</span>
+              <span className="cs-attack-damage">{[a.damage, a.damageType].filter(Boolean).join(' · ')}</span>
             </div>
           ))}
         </div>

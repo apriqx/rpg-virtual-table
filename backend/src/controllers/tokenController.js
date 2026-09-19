@@ -3,6 +3,12 @@ const { broadcastToTable } = require('../socket');
 
 const TOKEN_INCLUDE = { permissions: true, owner: { select: { id: true, username: true } }, character: { select: { id: true, name: true, data: true } } };
 
+function sanitizeFieldPath(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().slice(0, 80);
+  return (s && /^[A-Za-z0-9_.[\]-]+$/.test(s)) ? s : null;
+}
+
 function sanitizeBars(bars) {
   if (!Array.isArray(bars)) return null;
   return bars.slice(0, 3).map((b) => (b && typeof b === 'object' ? {
@@ -11,6 +17,8 @@ function sanitizeBars(bars) {
     max: Number(b.max) || 0,
     visible: b.visible !== false,
     color: typeof b.color === 'string' ? b.color.slice(0, 9) : '#50fa7b',
+    valuePath: sanitizeFieldPath(b.valuePath),
+    maxPath: sanitizeFieldPath(b.maxPath),
   } : null));
 }
 

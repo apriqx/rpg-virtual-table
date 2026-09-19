@@ -3,6 +3,7 @@ import { Stage, Layer, Rect, Line, Image as KonvaImage, Text, Group, Circle, Ell
 import React from 'react';
 import { resolveUrl } from '../services/api';
 import { markerEmoji } from './tokenMarkers';
+import { resolveFieldPath } from './charFieldPaths';
 
 const TokenComponent = React.memo(function TokenComponent({ token, isSelected, isActive, isMaster, masquerade, onDragEnd, onClick, onContextMenu, onMenuOpen, snapToGrid, canMove }) {
   const [img, setImg] = useState(null);
@@ -28,11 +29,21 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
   const hasLight = (token.lightRadius || 0) > 0 && !masquerade;
 
   const charData = masquerade ? null : token.character && token.character.data;
-  const customBars = Array.isArray(token.bars) ? token.bars.filter((b) => b && b.visible !== false && Number(b.max) > 0).slice(0, 3) : [];
-  const hasHp = customBars.length === 0 && charData && typeof charData.hp && typeof charData.hp.max === 'number' && charData.hp.max > 0;
-  const barList = customBars.length > 0
-    ? customBars.map((b) => ({ pct: Math.max(0, Math.min(100, (Number(b.current) / Number(b.max)) * 100)), color: b.color || '#50fa7b' }))
-    : (hasHp ? [{ pct: Math.max(0, Math.min(100, (((charData.hp.current || 0) + (charData.hp.temp || 0)) / charData.hp.max) * 100)), color: (((charData.hp.current || 0) + (charData.hp.temp || 0)) / charData.hp.max) > 0.5 ? '#50fa7b' : (((charData.hp.current || 0) + (charData.hp.temp || 0)) / charData.hp.max) > 0.25 ? '#f1fa8c' : '#ff5555' }] : []);
+  const rawBars = (Array.isArray(token.bars) ? token.bars : []).filter((b) => b && b.visible !== false).slice(0, 3);
+  const barList = [];
+  for (const b of rawBars) {
+    if (b.valuePath && charData) {
+      // barra vinculada à ficha (itens 54-57): valor/max vêm do campo mapeado
+      const v = resolveFieldPath(charData, b.valuePath);
+      if (v === null) continue;
+      const m = b.maxPath ? resolveFieldPath(charData, b.maxPath) : null;
+      if (m !== null && m > 0) barList.push({ pct: Math.max(0, Math.min(100, (v / m) * 100)), color: b.color || '#50fa7b', text: null });
+      else barList.push({ pct: 100, color: b.color || '#50fa7b', text: String(Math.round(v * 10) / 10) });
+    } else if (Number(b.max) > 0) {
+      barList.push({ pct: Math.max(0, Math.min(100, ((Number(b.current) || 0) / Number(b.max)) * 100)), color: b.color || '#50fa7b', text: null });
+    }
+  }
+  const hasHp = barList.length === 0 && charData && typeof charData.hp && typeof charData.hp.max === 'number' && charData.hp.max > 0;
   const barsH = barList.length * 6;
 
   let label = null;
@@ -74,6 +85,9 @@ const TokenComponent = React.memo(function TokenComponent({ token, isSelected, i
             <Group key={i} y={h + i * 6}>
               <Rect width={w} height={5} fill="#1a1a2e" />
               <Rect width={(w * b.pct) / 100} height={5} fill={b.color} />
+              {b.text !== null && (
+                <Text text={b.text} x={w + 3} y={-2} fontSize={9} fill={b.color} listening={false} fontStyle="bold" />
+              )}
             </Group>
           ))}
         </Group>

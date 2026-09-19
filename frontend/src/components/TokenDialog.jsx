@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api, { resolveUrl } from '../services/api';
 import { STATUS_MARKERS } from './tokenMarkers';
+import { collectFieldPaths } from './charFieldPaths';
 
 const BAR_COLORS = ['#50fa7b', '#ff5555', '#8be9fd', '#f1fa8c', '#bd93f9'];
 const TABS = [
@@ -12,7 +13,7 @@ const TABS = [
   { key: 'avancado', label: 'Avançado' },
 ];
 
-function emptyBar(i) { return { label: `Barra ${i + 1}`, current: 0, max: 100, visible: true, color: BAR_COLORS[i % BAR_COLORS.length] }; }
+function emptyBar(i) { return { label: `Barra ${i + 1}`, current: 0, max: 100, visible: true, color: BAR_COLORS[i % BAR_COLORS.length], valuePath: null, maxPath: null }; }
 
 function loadBars(token) {
   const arr = Array.isArray(token && token.bars) ? token.bars.slice(0, 3) : [];
@@ -69,6 +70,7 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
   if (!open) return null;
 
   const tabs = isMaster ? TABS : TABS.filter((t) => t.key === 'geral' || t.key === 'status');
+  const fieldPaths = collectFieldPaths(token && token.character ? token.character.data : null);
 
   function toggleMarker(key) { setMarkers((m) => (m.includes(key) ? m.filter((k) => k !== key) : [...m, key])); }
   function setBarSlot(i, patch) { setBars((b) => b.map((bar, idx) => (idx === i ? { ...emptyBar(i), ...bar, ...patch } : bar))); }
@@ -126,6 +128,9 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
               <div className="form-group"><label>Imagem</label>
                 {isMaster && <input type="file" accept="image/*" onChange={handleFileChange} disabled={uploading} />}
                 <input type="url" placeholder="https://exemplo.com/imagem.png" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
+                {isMaster && characters.some((c) => c.id === characterId && c.data && c.data.portrait) && (
+                  <button type="button" className="btn btn-sm" style={{ marginTop: 4, display: 'block' }} onClick={() => setImageUrl(characters.find((c) => c.id === characterId).data.portrait)}>Usar retrato da ficha</button>
+                )}
                 <small style={{ color: '#aaa' }}>{uploading ? 'Enviando arquivo...' : 'Envie um arquivo (mestre) ou cole o link de uma imagem hospedada.'}</small>
                 {imageUrl && <img src={resolveUrl(imageUrl)} alt="preview" style={{ maxWidth: '100%', maxHeight: 120, marginTop: 6, borderRadius: 4, display: 'block' }} />}
               </div>
@@ -161,13 +166,41 @@ export default function TokenDialog({ open, onClose, onSubmit, members, tableId,
                   {bar && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 40px', gap: 6, marginTop: 6, alignItems: 'center' }}>
                       <input value={bar.label} onChange={(e) => setBarSlot(i, { label: e.target.value })} placeholder="Rótulo" />
-                      <input type="number" value={bar.current} onChange={(e) => setBarSlot(i, { current: Number(e.target.value) })} title="Atual" />
-                      <input type="number" value={bar.max} onChange={(e) => setBarSlot(i, { max: Number(e.target.value) })} title="Máximo" />
-                      <input type="color" value={bar.color} onChange={(e) => setBarSlot(i, { color: e.target.value })} title="Cor" />
+                      {bar.valuePath ? (
+                        <>
+                          <select value={bar.valuePath} onChange={(e) => setBarSlot(i, { valuePath: e.target.value || null })} title="Campo atual (ficha)" style={{ gridColumn: '1 / 3' }}>
+                            {fieldPaths.map((f) => <option key={f.path} value={f.path}>{f.label}</option>)}
+                          </select>
+                          <select value={bar.maxPath || ''} onChange={(e) => setBarSlot(i, { maxPath: e.target.value || null })} title="Campo máximo (opcional)" style={{ gridColumn: '1 / 3' }}>
+                            <option value="">— sem máximo (indicador) —</option>
+                            {fieldPaths.map((f) => <option key={f.path} value={f.path}>{f.label}</option>)}
+                          </select>
+                          <span style={{ fontSize: 11, color: '#8a8aa0', gridColumn: '1 / 4' }}>Fonte: ficha vinculada (atualiza automaticamente)</span>
+                          <input type="color" value={bar.color} onChange={(e) => setBarSlot(i, { color: e.target.value })} title="Cor" />
+                        </>
+                      ) : (
+                        <>
+                          <input type="number" value={bar.current} onChange={(e) => setBarSlot(i, { current: Number(e.target.value) })} title="Atual" />
+                          <input type="number" value={bar.max} onChange={(e) => setBarSlot(i, { max: Number(e.target.value) })} title="Máximo" />
+                          <input type="color" value={bar.color} onChange={(e) => setBarSlot(i, { color: e.target.value })} title="Cor" />
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {bar && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 12, alignItems: 'center' }}>
+                      <span style={{ color: '#8a8aa0' }}>Fonte:</span>
+                      <label style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                        <input type="radio" name={`barfont-${i}`} checked={!bar.valuePath} onChange={() => setBarSlot(i, { valuePath: null, maxPath: null })} /> Manual
+                      </label>
+                      <label style={{ display: 'flex', gap: 3, alignItems: 'center' }} title={token.character ? '' : 'Vincule uma ficha ao token para usar esta opção'}>
+                        <input type="radio" name={`barfont-${i}`} checked={Boolean(bar.valuePath)} disabled={!token.character} onChange={() => setBarSlot(i, { valuePath: (fieldPaths[0] || {}).path || null, maxPath: null })} /> Ficha
+                      </label>
                     </div>
                   )}
                 </div>
               ))}
+              {!token.character && <p style={{ fontSize: 11, color: '#8a8aa0', marginTop: 4 }}>Dica: vincule uma ficha ao token (aba Geral) para poder ligar as barras aos campos dela.</p>}
               <div className="form-group" style={{ marginTop: 12 }}><label>Marcadores de condição</label>
                 <div className="marker-grid">
                   {STATUS_MARKERS.map((m) => (

@@ -27,7 +27,7 @@ async function getCharacters(req, res) {
       tableId,
       OR: [
         { userId: req.user.id },
-        { kind: { in: ['npc', 'monster'] }, permissions: { some: { userId: req.user.id, canView: true } } },
+        { permissions: { some: { userId: req.user.id, canView: true } } },
       ],
     };
     const characters = await prisma.character.findMany({ where, include: CHAR_INCLUDE, orderBy: { createdAt: 'asc' } });
@@ -44,7 +44,6 @@ async function getCharacter(req, res) {
     if (!character) return res.status(404).json({ error: 'Ficha nao encontrada' });
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
     if (!isMaster && character.userId !== req.user.id) {
-      if (character.kind === 'pc') return res.status(403).json({ error: 'Sem permissao para ver esta ficha' });
       const perm = character.permissions.find((p) => p.userId === req.user.id);
       if (!perm || !perm.canView) return res.status(403).json({ error: 'Sem permissao para ver esta ficha' });
     }
@@ -57,17 +56,16 @@ async function getCharacter(req, res) {
 async function createCharacter(req, res) {
   try {
     const { tableId } = req.params;
-    const { name, system, data, kind } = req.body;
+    const { name, system, data, kind, userId } = req.body;
+    const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
     if (kind !== undefined && !KINDS.includes(kind)) return res.status(400).json({ error: 'Tipo invalido (pc, npc ou monster)' });
     const finalKind = KINDS.includes(kind) ? kind : 'pc';
-    if (finalKind !== 'pc') {
-      const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
-      if (!isMaster) return res.status(403).json({ error: 'Apenas o mestre cria fichas de NPC ou Monstro' });
-    }
+    if (finalKind !== 'pc' && !isMaster) return res.status(403).json({ error: 'Apenas o mestre cria fichas de NPC ou Monstro' });
+    const ownerId = isMaster && typeof userId === 'string' && userId ? userId : req.user.id;
     const character = await prisma.character.create({
       data: {
         tableId,
-        userId: req.user.id,
+        userId: ownerId,
         name: name || 'Sem nome',
         system: system || 'custom',
         kind: finalKind,
@@ -90,7 +88,7 @@ async function updateCharacter(req, res) {
     if (!existing) return res.status(404).json({ error: 'Ficha nao encontrada' });
     const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
     let allowed = isMaster || existing.userId === req.user.id;
-    if (!allowed && existing.kind !== 'pc') {
+    if (!allowed) {
       const perm = existing.permissions.find((p) => p.userId === req.user.id);
       allowed = Boolean(perm && perm.canControl);
     }
@@ -131,6 +129,8 @@ async function setCharacterPermissions(req, res) {
     const { permissions } = req.body;
     const existing = await prisma.character.findUnique({ where: { id: characterId } });
     if (!existing || existing.tableId !== tableId) return res.status(404).json({ error: 'Ficha nao encontrada' });
+    const isMaster = req.user.role === 'ADMIN' || (await isUserMaster(tableId, req.user.id));
+    if (!isMaster && existing.userId !== req.user.id) return res.status(403).json({ error: 'Apenas o dono da ficha ou o mestre podem gerenciar o compartilhamento' });
     const list = Array.isArray(permissions) ? permissions : [];
     await prisma.$transaction([
       prisma.characterPermission.deleteMany({ where: { characterId } }),
